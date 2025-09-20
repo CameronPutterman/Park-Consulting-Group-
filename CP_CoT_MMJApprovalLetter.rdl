@@ -1,0 +1,1256 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Report MustUnderstand="df" xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner" xmlns:df="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition/defaultfontfamily" xmlns:am="http://schemas.microsoft.com/sqlserver/reporting/authoringmetadata">
+  <am:AuthoringMetadata>
+    <am:CreatedBy>
+      <am:Name>SSDTRS</am:Name>
+      <am:Version>17.14.36301.6</am:Version>
+    </am:CreatedBy>
+    <am:UpdatedBy>
+      <am:Name>SSDTRS</am:Name>
+      <am:Version>17.14.36301.6</am:Version>
+    </am:UpdatedBy>
+    <am:LastModifiedTimestamp>2025-07-18T22:05:13.4415010Z</am:LastModifiedTimestamp>
+  </am:AuthoringMetadata>
+  <df:DefaultFontFamily>Segoe UI</df:DefaultFontFamily>
+  <AutoRefresh>0</AutoRefresh>
+  <DataSources>
+    <DataSource Name="CoTuscon">
+      <DataSourceReference>EnerGov_Tucson_Prod</DataSourceReference>
+      <rd:SecurityType>None</rd:SecurityType>
+      <rd:DataSourceID>171aa15c-562e-4211-a40f-9dcf8bc1e5b8</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+  <DataSets>
+    <DataSet Name="MMJApprovalLetter">
+      <Query>
+        <DataSourceName>CoTuscon</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@PMPERMITID">
+            <Value>=Parameters!PMPERMITID.Value</Value>
+          </QueryParameter>
+        </QueryParameters>
+        <CommandText>;WITH
+	CONTACTS AS (
+		SELECT PC.PMPERMITID, PC.GLOBALENTITYID
+			, LMCT.[NAME] CONTACTTYPE
+			, GE.FIRSTNAME + ' ' + GE.LASTNAME CONTACTNAME
+			, GE.GLOBALENTITYNAME CONTACTCOMPANY
+		, COALESCE(NULLIF(RTRIM(GE.BUSINESSPHONE),''), NULLIF(RTRIM(GE.MOBILEPHONE),''), NULLIF(RTRIM(GE.HOMEPHONE),''), NULLIF(RTRIM(GE.OTHERPHONE),'')) PHONE
+		, GE.EMAIL
+		, ROW_NUMBER () OVER (
+			PARTITION BY PC.PMPERMITID, LMCT.[NAME]
+			ORDER BY PC.ISBILLING DESC, PC.GLOBALENTITYID
+		  ) ROWNBR
+		FROM PMPERMITCONTACT PC
+			INNER JOIN GLOBALENTITY GE ON PC.GLOBALENTITYID = GE.GLOBALENTITYID
+			INNER JOIN LANDMANAGEMENTCONTACTTYPE LMCT ON PC.LANDMANAGEMENTCONTACTTYPEID = LMCT.LANDMANAGEMENTCONTACTTYPEID
+		WHERE PC.PMPERMITID = @PMPERMITID
+	), CONADD AS (
+		SELECT C.GLOBALENTITYID
+		, RTRIM(RTRIM(LTRIM(COALESCE(MA.POBOX,'') + ' ')
+			+ LTRIM(COALESCE(MA.ADDRESSLINE1,'') + ' ')
+			+ LTRIM(COALESCE(MA.PREDIRECTION,'') + ' ') 
+			+ LTRIM(COALESCE(MA.ADDRESSLINE2,'') + ' ') 
+			+ LTRIM(COALESCE(MA.STREETTYPE,'') + ' ') 
+			+ LTRIM(COALESCE(MA.POSTDIRECTION,'') + ' ')
+		  )
+			+ CASE WHEN NULLIF(RTRIM(MA.UNITORSUITE),'') IS NOT NULL
+					THEN CHAR(10) + LTRIM(COALESCE(MA.UNITORSUITE,'') + ' ') 
+					ELSE ''
+			  END
+			--+ LTRIM(COALESCE(MA.ADDRESSLINE3,''))
+		  ) AL1
+		, (CASE WHEN RTRIM(LTRIM(COALESCE(MA.CITY,''))) = '' 
+			THEN '' 
+			ELSE RTRIM(LTRIM(COALESCE(MA.CITY,''))) + ', ' END)
+			+ (LTRIM(COALESCE(MA.[STATE],'') + ' ') 
+			+ REPLACE((CASE WHEN LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ','')) &gt; 5 
+			THEN LEFT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),5) + '-' + RIGHT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),ABS(LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''))-5)) 
+			ELSE COALESCE(MA.POSTALCODE,'') END),'--','-')
+		  ) AL2
+		  , ROW_NUMBER () OVER (
+			PARTITION BY C.GLOBALENTITYID
+			ORDER BY GEMA.MAIN DESC, MA.MAILINGADDRESSID
+		  ) ROWNBR
+	FROM CONTACTS C
+	INNER JOIN GLOBALENTITYMAILINGADDRESS GEMA ON C.GLOBALENTITYID = GEMA.GLOBALENTITYID
+	INNER JOIN MAILINGADDRESS MA ON GEMA.MAILINGADDRESSID = MA.MAILINGADDRESSID
+), ALLZONES AS (
+	SELECT PZ.PMPERMITID, Z.[NAME], Z.ZONECODE, ROW_NUMBER() OVER (ORDER BY PZ.MAIN DESC) ROWNBR
+	FROM PMPERMITZONE PZ
+		LEFT JOIN ZONE Z ON PZ.ZONEID = Z.ZONEID
+	WHERE PZ.PMPERMITID = @PMPERMITID
+), ALLPARCELS AS (
+SELECT PPAR.PMPERMITID, PAR.PARCELNUMBER
+	, ROW_NUMBER() OVER (ORDER BY PPAR.MAIN) ROWNBR
+FROM PMPERMITPARCEL PPAR
+	INNER JOIN PARCEL PAR ON PPAR.PARCELID = PAR.PARCELID
+WHERE PPAR.PMPERMITID = @PMPERMITID
+), ALLLOCATION AS (
+SELECT PA.PMPERMITID
+	, RTRIM(LTRIM(COALESCE(MA.POBOX,'') + ' ')
+		+ LTRIM(COALESCE(MA.ADDRESSLINE1,'') + ' ')
+		+ LTRIM(COALESCE(MA.PREDIRECTION,'') + ' ') 
+		+ LTRIM(COALESCE(MA.ADDRESSLINE2,'') + ' ') 
+		+ LTRIM(COALESCE(MA.STREETTYPE,'') + ' ') 
+		+ LTRIM(COALESCE(MA.POSTDIRECTION,'') + ' ') 
+		+ LTRIM(COALESCE(MA.UNITORSUITE,'') + ' ') 
+		) LOCATION_ADDRESS_LINE1
+		, (CASE WHEN RTRIM(LTRIM(COALESCE(MA.CITY,''))) = '' 
+			THEN '' 
+			ELSE RTRIM(LTRIM(COALESCE(MA.CITY,''))) + ', ' END)
+			+ (LTRIM(COALESCE(MA.[STATE],'') + ' ') 
+			+ REPLACE((CASE WHEN LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ','')) &gt; 5 
+			THEN LEFT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),5) + '-' + RIGHT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),ABS(LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''))-5)) 
+			ELSE COALESCE(MA.POSTALCODE,'') END),'--','-')
+		 ) LOCATION_ADDRESS_LINE2
+	, ROW_NUMBER() OVER (ORDER BY PA.MAIN) ROWNBR
+FROM PMPERMITADDRESS PA
+	LEFT JOIN MAILINGADDRESS MA ON PA.MAILINGADDRESSID = MA.MAILINGADDRESSID
+WHERE PA.PMPERMITID = @PMPERMITID
+)
+SELECT P.PMPERMITID
+	, P.DESCRIPTION, P.PERMITNUMBER
+	, PT.NAME PermitType, PT.PMPERMITTYPEID
+	, PWC.NAME PermitWorkClass
+	, A.CONTACTNAME, A.CONTACTCOMPANY
+	, A.PHONE, A.EMAIL
+	, AA.AL1 AppAL1
+	, AA.AL2 AppAL2
+	, RTRIM(LTRIM(COALESCE(MA.POBOX,'') + ' ')
+	+ COALESCE(MA.ADDRESSLINE1,'') + ' ' 
+	+ LTRIM(COALESCE(MA.PREDIRECTION,'') + ' ') 
+	+ LTRIM(COALESCE(MA.ADDRESSLINE2,'') + ' ') 
+	+ LTRIM(COALESCE(MA.STREETTYPE,'') + ' ') 
+	+ LTRIM(COALESCE(MA.POSTDIRECTION,'') + ' ') 
+	+ LTRIM(COALESCE(MA.UNITORSUITE,'') + ' ') 
+	) AL1
+	, (CASE WHEN RTRIM(LTRIM(COALESCE(MA.CITY,''))) = '' 
+		THEN '' 
+		ELSE RTRIM(LTRIM(COALESCE(MA.CITY,''))) + ', ' END) CITY
+	, LTRIM(COALESCE(MA.[STATE],'') + ' ') [STATE]
+	, REPLACE((CASE WHEN LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ','')) &gt; 5 
+		THEN LEFT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),5) + '-' + RIGHT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),ABS(LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''))-5)) 
+		ELSE COALESCE(MA.POSTALCODE,'') END),'--','-'
+	  ) POSTALCODE
+	, STUFF((SELECT '; ' + PAR.PARCELNUMBER
+			FROM ALLPARCELS PAR
+			WHERE PAR.PMPERMITID = @PMPERMITID
+			ORDER BY PAR.ROWNBR
+			FOR XML PATH(''), root('MyString'), type
+			).value('/MyString[1]','varchar(max)'),1,2,''
+			) ALLPARCELNUMBERS
+	, STUFF((SELECT '; ' + AL.LOCATION_ADDRESS_LINE1
+			FROM ALLLOCATION AL 
+			WHERE AL.PMPERMITID = @PMPERMITID
+			ORDER BY AL.ROWNBR
+			FOR XML PATH(''), root('MyString'), type
+			).value('/MyString[1]','varchar(max)'
+			), 1, 2, '') ALLLOCATIONADDRESS
+	, STUFF((SELECT '; ' + Z.ZONECODE
+			FROM ALLZONES Z
+			WHERE Z.PMPERMITID = @PMPERMITID
+			ORDER BY Z.ROWNBR
+			FOR XML PATH(''), root('MyString'), type
+			).value('/MyString[1]','varchar(max)'
+			), 1, 2, '') ZONECODE
+	, PI_FACILITYTYPE.SVALUE FACILITYTYPE
+	, CC.[NAME] AS CONDITIONCATEGORY, CON.[NAME] AS CONDITION, CON.COMMENTS
+--, CON.[DESCRIPTION]
+, CON.ISENABLE
+	, PCON.CREATEDON, PCON.ISSATISFIED, CSC.SCOPENAME
+	, ROW_NUMBER() OVER (ORDER BY PCON.[ORDER], PCON.CREATEDON) CONDITIONORDER
+	, (SELECT [IMAGE] FROM RPTIMAGELIB WHERE IMAGENAME = 'TucsonPDSDLogo_Vertical') AS TucsonLogo
+FROM PMPERMIT P
+	LEFT JOIN PMPERMITTYPE PT ON P.PMPERMITTYPEID = PT.PMPERMITTYPEID
+	LEFT JOIN PMPERMITWORKCLASS PWC ON P.PMPERMITWORKCLASSID = PWC.PMPERMITWORKCLASSID
+	LEFT JOIN CONTACTS A ON P.PMPERMITID = A.PMPERMITID
+		AND A.CONTACTTYPE = 'Applicant'
+		AND A.ROWNBR = 1
+	LEFT JOIN CONADD AA ON A.GLOBALENTITYID = AA.GLOBALENTITYID
+		AND AA.ROWNBR = 1
+	LEFT JOIN PMPERMITADDRESS PA ON P.PMPERMITID = PA.PMPERMITID
+		AND PA.MAIN = 1
+	LEFT JOIN MAILINGADDRESS MA ON PA.MAILINGADDRESSID = MA.MAILINGADDRESSID
+	LEFT JOIN CUSTOMSAVERPERMITMANAGEMENT CS ON P.PMPERMITID = CS.ID
+	LEFT JOIN CUSTOMFIELDPICKLISTITEM PI_FACILITYTYPE ON CS.PCK_FacilityType = PI_FACILITYTYPE.GCUSTOMFIELDPICKLISTITEM
+	LEFT JOIN PMPERMITCONDITION PCON ON P.PMPERMITID = PCON.PMPERMITID
+	LEFT JOIN CONDITION CON ON PCON.CONDITIONID = CON.CONDITIONID 
+	LEFT JOIN CONDITIONCATEGORY CC ON CON.CONDITIONCATEGORYID = CC.CONDITIONCATEGORYID
+	LEFT JOIN CONDITIONSCOPE CSC ON PCON.SCOPE = CSC.CONDITIONSCOPEID
+WHERE P.PMPERMITID = @PMPERMITID</CommandText>
+      </Query>
+      <Fields>
+        <Field Name="PMPERMITID">
+          <DataField>PMPERMITID</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="DESCRIPTION">
+          <DataField>DESCRIPTION</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="PERMITNUMBER">
+          <DataField>PERMITNUMBER</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="PermitType">
+          <DataField>PermitType</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="PMPERMITTYPEID">
+          <DataField>PMPERMITTYPEID</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="PermitWorkClass">
+          <DataField>PermitWorkClass</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTNAME">
+          <DataField>CONTACTNAME</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTCOMPANY">
+          <DataField>CONTACTCOMPANY</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="PHONE">
+          <DataField>PHONE</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="EMAIL">
+          <DataField>EMAIL</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="AppAL1">
+          <DataField>AppAL1</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="AppAL2">
+          <DataField>AppAL2</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="AL1">
+          <DataField>AL1</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CITY">
+          <DataField>CITY</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="STATE">
+          <DataField>STATE</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="POSTALCODE">
+          <DataField>POSTALCODE</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ALLPARCELNUMBERS">
+          <DataField>ALLPARCELNUMBERS</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ALLLOCATIONADDRESS">
+          <DataField>ALLLOCATIONADDRESS</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ZONECODE">
+          <DataField>ZONECODE</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="FACILITYTYPE">
+          <DataField>FACILITYTYPE</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONDITIONCATEGORY">
+          <DataField>CONDITIONCATEGORY</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="TucsonLogo">
+          <DataField>TucsonLogo</DataField>
+          <rd:TypeName>System.Byte[]</rd:TypeName>
+        </Field>
+        <Field Name="CONDITION">
+          <DataField>CONDITION</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="COMMENTS">
+          <DataField>COMMENTS</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ISENABLE">
+          <DataField>ISENABLE</DataField>
+          <rd:TypeName>System.Boolean</rd:TypeName>
+        </Field>
+        <Field Name="CREATEDON">
+          <DataField>CREATEDON</DataField>
+          <rd:TypeName>System.DateTime</rd:TypeName>
+        </Field>
+        <Field Name="ISSATISFIED">
+          <DataField>ISSATISFIED</DataField>
+          <rd:TypeName>System.Boolean</rd:TypeName>
+        </Field>
+        <Field Name="SCOPENAME">
+          <DataField>SCOPENAME</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONDITIONORDER">
+          <DataField>CONDITIONORDER</DataField>
+          <rd:TypeName>System.Int64</rd:TypeName>
+        </Field>
+      </Fields>
+    </DataSet>
+  </DataSets>
+  <ReportSections>
+    <ReportSection>
+      <Body>
+        <ReportItems>
+          <Tablix Name="Tablix1">
+            <TablixBody>
+              <TablixColumns>
+                <TablixColumn>
+                  <Width>6.25in</Width>
+                </TablixColumn>
+              </TablixColumns>
+              <TablixRows>
+                <TablixRow>
+                  <Height>0.25in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox65">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Blank Space</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                    <FontWeight>Bold</FontWeight>
+                                    <Color>White</Color>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>Textbox65</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <VerticalAlign>Bottom</VerticalAlign>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                            <PaddingTop>2pt</PaddingTop>
+                            <PaddingBottom>2pt</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>0.21in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox38">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Marijuana Use Authorization Letter</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                    <FontWeight>Bold</FontWeight>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>Textbox37</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <VerticalAlign>Bottom</VerticalAlign>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                            <PaddingTop>2pt</PaddingTop>
+                            <PaddingBottom>2pt</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>0.176in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="FACILITYTYPE2">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Facility Type: </Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value>=Fields!FACILITYTYPE.Value</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>FACILITYTYPE</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>0.188in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="ALLLOCATIONADDRESS2">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Site Address: </Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value>=Fields!ALLLOCATIONADDRESS.Value</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>ALLLOCATIONADDRESS</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>0.188in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="ALLPARCELNUMBERS2">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Parcel ID: </Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value>=Fields!ALLPARCELNUMBERS.Value</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>ALLPARCELNUMBERS</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>0.167in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="ZONECODE2">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Zoning: </Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value>=Fields!ZONECODE.Value</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>ZONECODE</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>0.167in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="PERMITNUMBER2">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Activity #: </Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value>=Fields!PERMITNUMBER.Value</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>PERMITNUMBER</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>1.392in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox27">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Planning and Development Services Department (PDSD) has reviewed the materials provided with the application for a proposed </Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Label>FACILITYTYPE</Label>
+                                  <Value>=Fields!FACILITYTYPE.Value</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value> located at </Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Label>ALLLOCATIONADDRESS</Label>
+                                  <Value>=Fields!ALLLOCATIONADDRESS.Value</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value>. Based on the information you have provided, the subject site is in general compliance with City of Tucson zoning standards as regulated by the Unified Development Code. Standards such as odor mitigation and use size will be evaluated during review of applicable City of Tucson building permits.</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>Textbox27</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <VerticalAlign>Bottom</VerticalAlign>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                            <PaddingTop>2pt</PaddingTop>
+                            <PaddingBottom>2pt</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>1.411in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox21">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>This letter will provide authorization for proceeding with all required permits necessary to comply with City regulations and will vest the subject site as a </Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Label>FACILITYTYPE</Label>
+                                  <Value>=Fields!FACILITYTYPE.Value</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value> for City of Tucson purposes for one (1) year from the date of this letter. The subject site will be considered to be fully vested upon issuance of an Arizona Department of Health Services (ADHS) Certification and issuance of applicable City of Tucson building permits. Provide a copy of this letter and ADHS Certification with applicable City of Tucson building permit. Conditions of this approval, if any, are listed below.</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>Textbox21</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <VerticalAlign>Bottom</VerticalAlign>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                            <PaddingTop>2pt</PaddingTop>
+                            <PaddingBottom>2pt</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>0.333in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Rectangle Name="Rectangle2">
+                          <ReportItems>
+                            <Textbox Name="Textbox41">
+                              <CanGrow>true</CanGrow>
+                              <KeepTogether>true</KeepTogether>
+                              <Paragraphs>
+                                <Paragraph>
+                                  <TextRuns>
+                                    <TextRun>
+                                      <Value>=RowNumber(Nothing)</Value>
+                                      <Style>
+                                        <FontFamily>Arial</FontFamily>
+                                        <FontSize>11pt</FontSize>
+                                      </Style>
+                                    </TextRun>
+                                    <TextRun>
+                                      <Value>.</Value>
+                                      <Style>
+                                        <FontFamily>Arial</FontFamily>
+                                        <FontSize>11pt</FontSize>
+                                      </Style>
+                                    </TextRun>
+                                  </TextRuns>
+                                  <Style>
+                                    <TextAlign>Left</TextAlign>
+                                  </Style>
+                                </Paragraph>
+                              </Paragraphs>
+                              <rd:DefaultName>Textbox41</rd:DefaultName>
+                              <Top>0.166in</Top>
+                              <Height>0.167in</Height>
+                              <Width>0.347in</Width>
+                              <Style>
+                                <Border>
+                                  <Style>None</Style>
+                                </Border>
+                                <PaddingRight>2pt</PaddingRight>
+                                <PaddingTop>2pt</PaddingTop>
+                                <PaddingBottom>2pt</PaddingBottom>
+                              </Style>
+                            </Textbox>
+                            <Textbox Name="Textbox42">
+                              <CanGrow>true</CanGrow>
+                              <KeepTogether>true</KeepTogether>
+                              <Paragraphs>
+                                <Paragraph>
+                                  <TextRuns>
+                                    <TextRun>
+                                      <Value>=Fields!COMMENTS.Value</Value>
+                                      <Style>
+                                        <FontFamily>Arial</FontFamily>
+                                        <FontSize>11pt</FontSize>
+                                      </Style>
+                                    </TextRun>
+                                  </TextRuns>
+                                  <Style>
+                                    <TextAlign>Left</TextAlign>
+                                  </Style>
+                                </Paragraph>
+                              </Paragraphs>
+                              <rd:DefaultName>Textbox41</rd:DefaultName>
+                              <Top>0.166in</Top>
+                              <Left>0.347in</Left>
+                              <Height>0.167in</Height>
+                              <Width>5.903in</Width>
+                              <ZIndex>1</ZIndex>
+                              <Style>
+                                <Border>
+                                  <Style>None</Style>
+                                </Border>
+                                <PaddingRight>2pt</PaddingRight>
+                                <PaddingTop>2pt</PaddingTop>
+                                <PaddingBottom>2pt</PaddingBottom>
+                              </Style>
+                            </Textbox>
+                          </ReportItems>
+                          <KeepTogether>true</KeepTogether>
+                          <Style>
+                            <Border>
+                              <Style>None</Style>
+                            </Border>
+                          </Style>
+                        </Rectangle>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>0.75in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox45">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Zoning compliance is specifically contingent upon ADHS approval of your application. Additionally, prior approval of any Marijuana Use by ADHS whose location would be within regulated setbacks of your proposed site would render this approval null and void.</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>Textbox45</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Style>None</Style>
+                            </Border>
+                            <VerticalAlign>Bottom</VerticalAlign>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                            <PaddingTop>2pt</PaddingTop>
+                            <PaddingBottom>0.044in</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>1.174in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox53">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>NOTICE: The information provided herein is solely related to compliance with the City of Tucson land use regulations. Nothing herein is intended to express any opinion regarding compliance with federal or state laws or any lawful, applicable health regulations, including those promulgated by the Arizona Department of Health Services and any other authorizeds agency.</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>Textbox53</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Style>None</Style>
+                            </Border>
+                            <VerticalAlign>Middle</VerticalAlign>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                            <PaddingTop>0.091in</PaddingTop>
+                            <PaddingBottom>0.025pt</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+                <TablixRow>
+                  <Height>1.167in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox31">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Value>Sincerely,
+
+
+
+Planning and Development Services</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                    <FontSize>11pt</FontSize>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>Textbox31</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <VerticalAlign>Top</VerticalAlign>
+                            <PaddingLeft>2pt</PaddingLeft>
+                            <PaddingRight>2pt</PaddingRight>
+                            <PaddingTop>5pt</PaddingTop>
+                            <PaddingBottom>0.109pt</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+              </TablixRows>
+            </TablixBody>
+            <TablixColumnHierarchy>
+              <TablixMembers>
+                <TablixMember />
+              </TablixMembers>
+            </TablixColumnHierarchy>
+            <TablixRowHierarchy>
+              <TablixMembers>
+                <TablixMember>
+                  <Visibility>
+                    <Hidden>=IsNothing(Fields!CONTACTNAME.Value) OrElse Trim(Fields!CONTACTNAME.Value) = ""</Hidden>
+                  </Visibility>
+                  <KeepWithGroup>After</KeepWithGroup>
+                </TablixMember>
+                <TablixMember>
+                  <Group Name="Group1">
+                    <GroupExpressions>
+                      <GroupExpression>PMPERMITID</GroupExpression>
+                    </GroupExpressions>
+                  </Group>
+                  <SortExpressions>
+                    <SortExpression>
+                      <Value>PMPERMITID</Value>
+                    </SortExpression>
+                  </SortExpressions>
+                  <TablixMembers>
+                    <TablixMember>
+                      <KeepWithGroup>After</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>After</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>After</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>After</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>After</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>After</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>After</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>After</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <Group Name="Details" />
+                      <Visibility>
+                        <Hidden>=IsNothing(Fields!CONDITION.Value) OrElse TRIM(Fields!CONDITION.Value) = ""</Hidden>
+                      </Visibility>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>Before</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>Before</KeepWithGroup>
+                    </TablixMember>
+                    <TablixMember>
+                      <KeepWithGroup>Before</KeepWithGroup>
+                    </TablixMember>
+                  </TablixMembers>
+                </TablixMember>
+              </TablixMembers>
+            </TablixRowHierarchy>
+            <DataSetName>MMJApprovalLetter</DataSetName>
+            <Left>1.25in</Left>
+            <Height>7.573in</Height>
+            <Width>6.25in</Width>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+              <FontFamily>arial</FontFamily>
+              <FontSize>11pt</FontSize>
+            </Style>
+          </Tablix>
+        </ReportItems>
+        <Height>7.911in</Height>
+        <Style />
+      </Body>
+      <Width>7.68in</Width>
+      <Page>
+        <PageHeader>
+          <Height>1.39in</Height>
+          <PrintOnFirstPage>true</PrintOnFirstPage>
+          <PrintOnLastPage>true</PrintOnLastPage>
+          <ReportItems>
+            <Image Name="TusconLogo">
+              <Source>Database</Source>
+              <Value>=Fields!TucsonLogo.Value</Value>
+              <MIMEType>image/png</MIMEType>
+              <Sizing>Fit</Sizing>
+              <Height>1.39in</Height>
+              <Width>1.1in</Width>
+              <Style>
+                <Border>
+                  <Style>None</Style>
+                </Border>
+              </Style>
+            </Image>
+            <Rectangle Name="Rectangle4">
+              <ReportItems>
+                <Textbox Name="ExecutionTime1">
+                  <CanGrow>true</CanGrow>
+                  <KeepTogether>true</KeepTogether>
+                  <Paragraphs>
+                    <Paragraph>
+                      <TextRuns>
+                        <TextRun>
+                          <Value>=Format(Globals!ExecutionTime, "MM/dd/yyyy")</Value>
+                          <Style>
+                            <FontFamily>Arial</FontFamily>
+                            <FontSize>11pt</FontSize>
+                          </Style>
+                        </TextRun>
+                      </TextRuns>
+                      <Style>
+                        <TextAlign>Left</TextAlign>
+                      </Style>
+                    </Paragraph>
+                  </Paragraphs>
+                  <rd:DefaultName>ExecutionTime1</rd:DefaultName>
+                  <Left>0.067in</Left>
+                  <Height>0.43056in</Height>
+                  <Width>4.10417in</Width>
+                  <Style>
+                    <Border>
+                      <Style>None</Style>
+                    </Border>
+                    <PaddingLeft>2pt</PaddingLeft>
+                    <PaddingRight>2pt</PaddingRight>
+                    <PaddingTop>2pt</PaddingTop>
+                    <PaddingBottom>2pt</PaddingBottom>
+                  </Style>
+                </Textbox>
+                <Textbox Name="Textbox64">
+                  <CanGrow>true</CanGrow>
+                  <KeepTogether>true</KeepTogether>
+                  <Paragraphs>
+                    <Paragraph>
+                      <TextRuns>
+                        <TextRun>
+                          <Value>Applicant</Value>
+                          <Style>
+                            <FontSize>11pt</FontSize>
+                            <FontWeight>Bold</FontWeight>
+                          </Style>
+                        </TextRun>
+                      </TextRuns>
+                      <Style />
+                    </Paragraph>
+                    <Paragraph>
+                      <TextRuns>
+                        <TextRun>
+                          <Value>=IIF(IsNothing(Fields!CONTACTNAME.Value) OrElse Trim(Fields!CONTACTNAME.Value) = "", "", 
+Fields!CONTACTNAME.Value &amp;
+IIf(IsNothing(Fields!CONTACTCOMPANY.Value) OrElse Trim(Fields!CONTACTCOMPANY.Value) = "", 
+    "", 
+    vbLf &amp; Fields!CONTACTCOMPANY.Value) &amp;
+IIf(IsNothing(Fields!AppAL1.Value) OrElse Trim(Fields!AppAL1.Value) = "", 
+    "", 
+    vbLf &amp; Fields!AppAL1.Value) &amp;
+IIf(IsNothing(Fields!AppAL2.Value) OrElse Trim(Fields!AppAL2.Value) = "", 
+    "", 
+    vbLf &amp; Fields!AppAL2.Value))</Value>
+                          <Style>
+                            <FontFamily>Arial</FontFamily>
+                            <FontSize>11pt</FontSize>
+                          </Style>
+                        </TextRun>
+                      </TextRuns>
+                      <Style />
+                    </Paragraph>
+                  </Paragraphs>
+                  <rd:DefaultName>Textbox64</rd:DefaultName>
+                  <Top>0.43056in</Top>
+                  <Left>0.15in</Left>
+                  <Height>0.40067in</Height>
+                  <Width>4.02117in</Width>
+                  <ZIndex>1</ZIndex>
+                  <Style>
+                    <Border>
+                      <Style>None</Style>
+                    </Border>
+                    <PaddingLeft>2pt</PaddingLeft>
+                    <PaddingRight>2pt</PaddingRight>
+                    <PaddingTop>2pt</PaddingTop>
+                    <PaddingBottom>2pt</PaddingBottom>
+                  </Style>
+                </Textbox>
+              </ReportItems>
+              <KeepTogether>true</KeepTogether>
+              <Left>1.1in</Left>
+              <Height>1.39in</Height>
+              <Width>5.24944in</Width>
+              <ZIndex>1</ZIndex>
+              <Style>
+                <Border>
+                  <Style>None</Style>
+                </Border>
+              </Style>
+            </Rectangle>
+          </ReportItems>
+          <Style>
+            <Border>
+              <Style>None</Style>
+            </Border>
+          </Style>
+        </PageHeader>
+        <PageFooter>
+          <Height>0.34028in</Height>
+          <PrintOnFirstPage>true</PrintOnFirstPage>
+          <PrintOnLastPage>true</PrintOnLastPage>
+          <ReportItems>
+            <Textbox Name="Textbox59">
+              <CanGrow>true</CanGrow>
+              <KeepTogether>true</KeepTogether>
+              <Paragraphs>
+                <Paragraph>
+                  <TextRuns>
+                    <TextRun>
+                      <Value>PUBLIC WORKS BUILDING ● 201 N. STONE ● P.O. BOX 27210 ● TUCSON, AZ 85726-7210
+Telephone: (520) 791-5550 Website: </Value>
+                      <Style>
+                        <FontFamily>Arial</FontFamily>
+                        <FontSize>9pt</FontSize>
+                      </Style>
+                    </TextRun>
+                    <TextRun>
+                      <Value>www.tucsonaz.gov/pdsd</Value>
+                      <ActionInfo>
+                        <Actions>
+                          <Action>
+                            <Hyperlink>https://www.tucsonaz.gov/Departments/Planning-Development-Services</Hyperlink>
+                          </Action>
+                        </Actions>
+                      </ActionInfo>
+                      <Style>
+                        <FontFamily>Arial</FontFamily>
+                        <FontSize>9pt</FontSize>
+                        <TextDecoration>Underline</TextDecoration>
+                        <Color>Blue</Color>
+                      </Style>
+                    </TextRun>
+                  </TextRuns>
+                  <Style>
+                    <TextAlign>Center</TextAlign>
+                  </Style>
+                </Paragraph>
+              </Paragraphs>
+              <rd:DefaultName>Textbox59</rd:DefaultName>
+              <Left>0.215in</Left>
+              <Height>0.34028in</Height>
+              <Width>7.465in</Width>
+              <Style>
+                <Border>
+                  <Style>None</Style>
+                </Border>
+                <PaddingLeft>2pt</PaddingLeft>
+                <PaddingRight>2pt</PaddingRight>
+                <PaddingTop>2pt</PaddingTop>
+                <PaddingBottom>2pt</PaddingBottom>
+              </Style>
+            </Textbox>
+          </ReportItems>
+          <Style>
+            <Border>
+              <Style>None</Style>
+            </Border>
+          </Style>
+        </PageFooter>
+        <LeftMargin>0.3in</LeftMargin>
+        <RightMargin>0.5in</RightMargin>
+        <TopMargin>0.5in</TopMargin>
+        <BottomMargin>0.5in</BottomMargin>
+        <Style />
+      </Page>
+    </ReportSection>
+  </ReportSections>
+  <ReportParameters>
+    <ReportParameter Name="PMPERMITID">
+      <DataType>String</DataType>
+      <DefaultValue>
+        <Values>
+          <Value>711B3623-010D-4DC2-9E81-E2CA5574843E</Value>
+        </Values>
+      </DefaultValue>
+      <Prompt>PMPERMITID</Prompt>
+    </ReportParameter>
+  </ReportParameters>
+  <ReportParametersLayout>
+    <GridLayoutDefinition>
+      <NumberOfColumns>4</NumberOfColumns>
+      <NumberOfRows>2</NumberOfRows>
+      <CellDefinitions>
+        <CellDefinition>
+          <ColumnIndex>0</ColumnIndex>
+          <RowIndex>0</RowIndex>
+          <ParameterName>PMPERMITID</ParameterName>
+        </CellDefinition>
+      </CellDefinitions>
+    </GridLayoutDefinition>
+  </ReportParametersLayout>
+  <rd:ReportUnitType>Inch</rd:ReportUnitType>
+  <rd:ReportID>3939a3a0-81fe-40b0-868a-c496539a04d9</rd:ReportID>
+</Report>
