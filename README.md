@@ -1,0 +1,1 @@
+PCG is a consulting group for assisting local governments. Due to the nature of the work I did, much of it contained sensitive/personal data and can not be posted in this repository. The files that are uploaded here should give a general overview of the work that I did there. 
