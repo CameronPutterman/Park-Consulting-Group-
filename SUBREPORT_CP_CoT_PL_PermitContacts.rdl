@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Report MustUnderstand="df" xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner" xmlns:df="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition/defaultfontfamily" xmlns:am="http://schemas.microsoft.com/sqlserver/reporting/authoringmetadata">
+  <am:AuthoringMetadata>
+    <am:CreatedBy>
+      <am:Name>SSDTRS</am:Name>
+      <am:Version>17.14.36301.6</am:Version>
+    </am:CreatedBy>
+    <am:UpdatedBy>
+      <am:Name>SSDTRS</am:Name>
+      <am:Version>17.14.36301.6</am:Version>
+    </am:UpdatedBy>
+    <am:LastModifiedTimestamp>2025-07-31T02:52:39.4546066Z</am:LastModifiedTimestamp>
+  </am:AuthoringMetadata>
+  <df:DefaultFontFamily>Segoe UI</df:DefaultFontFamily>
+  <AutoRefresh>0</AutoRefresh>
+  <DataSources>
+    <DataSource Name="CoTuscon">
+      <DataSourceReference>EnerGov_Tucson_Prod</DataSourceReference>
+      <rd:SecurityType>None</rd:SecurityType>
+      <rd:DataSourceID>5e235318-725b-4412-a542-82058e9247ff</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+  <DataSets>
+    <DataSet Name="CoT_PM_PermitContacts">
+      <Query>
+        <DataSourceName>CoTuscon</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="PLPLANID">
+            <Value>=Parameters!PLPLANID.Value</Value>
+            <rd:UserDefined>true</rd:UserDefined>
+          </QueryParameter>
+        </QueryParameters>
+        <CommandType>StoredProcedure</CommandType>
+        <CommandText>rpt_CoT_PL_ROWPermitContacts</CommandText>
+        <rd:UseGenericDesigner>true</rd:UseGenericDesigner>
+      </Query>
+      <Fields>
+        <Field Name="GLOBALENTITYID">
+          <DataField>GLOBALENTITYID</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ADDRESS_LINE1">
+          <DataField>ADDRESS_LINE1</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ADDRESS_LINE2">
+          <DataField>ADDRESS_LINE2</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTNAME">
+          <DataField>CONTACTNAME</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTCOMPANY">
+          <DataField>CONTACTCOMPANY</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTPHONE">
+          <DataField>CONTACTPHONE</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTTYPE">
+          <DataField>CONTACTTYPE</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ROWNBR">
+          <DataField>ROWNBR</DataField>
+          <rd:TypeName>System.Int64</rd:TypeName>
+        </Field>
+      </Fields>
+    </DataSet>
+  </DataSets>
+  <ReportSections>
+    <ReportSection>
+      <Body>
+        <ReportItems>
+          <Tablix Name="Tablix2">
+            <TablixBody>
+              <TablixColumns>
+                <TablixColumn>
+                  <Width>1.667in</Width>
+                </TablixColumn>
+                <TablixColumn>
+                  <Width>5.313in</Width>
+                </TablixColumn>
+              </TablixColumns>
+              <TablixRows>
+                <TablixRow>
+                  <Height>0.167in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="CONTACTTYPE">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Label>CONTACTTYPE</Label>
+                                  <Value>=UCASE(Fields!CONTACTTYPE.Value)</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value>:</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>CONTACTTYPE</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox12">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Label>@ContactInfo</Label>
+                                  <Value>=IIF(UCase(Fields!CONTACTTYPE.Value) &lt;&gt; "BARRICADE COMPANY" AND NOT(IsNothing(Fields!CONTACTCOMPANY.Value) OR Trim(Fields!CONTACTCOMPANY.Value) = ""), Fields!CONTACTCOMPANY.Value + vbCrLf + vbCrLf, "") +
+IIF(NOT(IsNothing(Fields!CONTACTNAME.Value) OR Trim(Fields!CONTACTNAME.Value) = ""), Fields!CONTACTNAME.Value, "") +
+IIF(UCase(Fields!CONTACTTYPE.Value) &lt;&gt; "BARRICADE COMPANY" AND NOT(IsNothing(Fields!ADDRESS_LINE1.Value) OR Trim(Fields!ADDRESS_LINE1.Value) = ""), vbCrLf + Fields!ADDRESS_LINE1.Value, "") +
+IIF(UCase(Fields!CONTACTTYPE.Value) &lt;&gt; "BARRICADE COMPANY" AND NOT(IsNothing(Fields!ADDRESS_LINE2.Value) OR Trim(Fields!ADDRESS_LINE2.Value) = ""), vbCrLf + Fields!ADDRESS_LINE2.Value, "") +
+IIF(UCase(Fields!CONTACTTYPE.Value) = "BARRICADE COMPANY" AND NOT(IsNothing(Fields!CONTACTPHONE.Value) OR Trim(Fields!CONTACTPHONE.Value) = ""), 
+    vbCrLf + IIF(Fields!CONTACTPHONE.Value &lt;&gt; "" AND Len(Fields!CONTACTPHONE.Value) = 10,
+        Left(Fields!CONTACTPHONE.Value, 3) + "-" + Mid(Fields!CONTACTPHONE.Value, 4, 3) + "-" + Right(Fields!CONTACTPHONE.Value, 4),
+        Fields!CONTACTPHONE.Value),
+    "")</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>Textbox12</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <PaddingBottom>3pt</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+              </TablixRows>
+            </TablixBody>
+            <TablixColumnHierarchy>
+              <TablixMembers>
+                <TablixMember />
+                <TablixMember />
+              </TablixMembers>
+            </TablixColumnHierarchy>
+            <TablixRowHierarchy>
+              <TablixMembers>
+                <TablixMember>
+                  <Group Name="Details" />
+                  <SortExpressions>
+                    <SortExpression>
+                      <Value>=Fields!ROWNBR.Value</Value>
+                    </SortExpression>
+                  </SortExpressions>
+                </TablixMember>
+              </TablixMembers>
+            </TablixRowHierarchy>
+            <DataSetName>CoT_PM_PermitContacts</DataSetName>
+            <SortExpressions>
+              <SortExpression>
+                <Value>=Fields!ROWNBR.Value</Value>
+              </SortExpression>
+            </SortExpressions>
+            <Height>0.167in</Height>
+            <Width>6.98in</Width>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Tablix>
+        </ReportItems>
+        <Height>0.167in</Height>
+        <Style />
+      </Body>
+      <Width>6.998in</Width>
+      <Page>
+        <LeftMargin>0.25in</LeftMargin>
+        <RightMargin>0.25in</RightMargin>
+        <TopMargin>0.25in</TopMargin>
+        <BottomMargin>0.25in</BottomMargin>
+        <Style />
+      </Page>
+    </ReportSection>
+  </ReportSections>
+  <ReportParameters>
+    <ReportParameter Name="PLPLANID">
+      <DataType>String</DataType>
+      <Prompt>PLPLANID</Prompt>
+    </ReportParameter>
+  </ReportParameters>
+  <ReportParametersLayout>
+    <GridLayoutDefinition>
+      <NumberOfColumns>4</NumberOfColumns>
+      <NumberOfRows>2</NumberOfRows>
+      <CellDefinitions>
+        <CellDefinition>
+          <ColumnIndex>1</ColumnIndex>
+          <RowIndex>0</RowIndex>
+          <ParameterName>PLPLANID</ParameterName>
+        </CellDefinition>
+      </CellDefinitions>
+    </GridLayoutDefinition>
+  </ReportParametersLayout>
+  <rd:ReportUnitType>Inch</rd:ReportUnitType>
+  <rd:ReportID>ca1d5101-2fc0-4f52-a09a-ff0570a0e5db</rd:ReportID>
+</Report>

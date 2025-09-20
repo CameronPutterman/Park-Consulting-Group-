@@ -1,0 +1,1878 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Report MustUnderstand="df" xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner" xmlns:df="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition/defaultfontfamily" xmlns:am="http://schemas.microsoft.com/sqlserver/reporting/authoringmetadata">
+  <am:AuthoringMetadata>
+    <am:CreatedBy>
+      <am:Name>SSDTRS</am:Name>
+      <am:Version>17.14.36401.2</am:Version>
+    </am:CreatedBy>
+    <am:UpdatedBy>
+      <am:Name>SSDTRS</am:Name>
+      <am:Version>17.14.36401.2</am:Version>
+    </am:UpdatedBy>
+    <am:LastModifiedTimestamp>2025-08-15T18:08:04.1249943Z</am:LastModifiedTimestamp>
+  </am:AuthoringMetadata>
+  <df:DefaultFontFamily>Times New Roman</df:DefaultFontFamily>
+  <AutoRefresh>0</AutoRefresh>
+  <DataSources>
+    <DataSource Name="CoTuscon">
+      <DataSourceReference>EnerGov_Tucson_Prod</DataSourceReference>
+      <rd:SecurityType>None</rd:SecurityType>
+      <rd:DataSourceID>d8824c97-d1b1-478e-a554-744ac381db89</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+  <DataSets>
+    <DataSet Name="CoTAZ_TW_Construction_Agreement">
+      <Query>
+        <DataSourceName>CoTuscon</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@PLPLANID">
+            <Value>=Parameters!PLPLANID.Value</Value>
+          </QueryParameter>
+        </QueryParameters>
+        <CommandText>;WITH 
+	CONTACTS AS (
+		SELECT PC.PLPLANID, PC.GLOBALENTITYID
+			, LMCT.[NAME] CONTACTTYPE
+			, GE.FIRSTNAME + ' ' + GE.LASTNAME CONTACTNAME
+			, GE.GLOBALENTITYNAME COMPANYNAME
+		, COALESCE(NULLIF(RTRIM(GE.BUSINESSPHONE),''), NULLIF(RTRIM(GE.MOBILEPHONE),''), NULLIF(RTRIM(GE.HOMEPHONE),''), NULLIF(RTRIM(GE.OTHERPHONE),'')) PHONE
+		, GE.EMAIL
+		, ROW_NUMBER () OVER (
+			PARTITION BY LMCT.[NAME]
+			ORDER BY PC.ISBILLING DESC, PC.GLOBALENTITYID
+		  ) ROWNBR
+		FROM PLPLANCONTACT PC
+			INNER JOIN GLOBALENTITY GE ON PC.GLOBALENTITYID = GE.GLOBALENTITYID
+			INNER JOIN LANDMANAGEMENTCONTACTTYPE LMCT ON PC.LANDMANAGEMENTCONTACTTYPEID = LMCT.LANDMANAGEMENTCONTACTTYPEID
+		WHERE PC.PLPLANID = @PLPLANID
+--Contact Address CTE
+	), CONADD AS (
+		SELECT C.GLOBALENTITYID
+		, RTRIM(RTRIM(LTRIM(COALESCE(MA.POBOX,'') + ' ')
+			+ LTRIM(COALESCE(MA.ADDRESSLINE1,'') + ' ')
+			+ LTRIM(COALESCE(MA.PREDIRECTION,'') + ' ') 
+			+ LTRIM(COALESCE(MA.ADDRESSLINE2,'') + ' ') 
+			+ LTRIM(COALESCE(MA.STREETTYPE,'') + ' ') 
+			+ LTRIM(COALESCE(MA.POSTDIRECTION,'') + ' ')
+		  )
+			+ CASE WHEN NULLIF(RTRIM(MA.UNITORSUITE),'') IS NOT NULL
+					THEN CHAR(10) + LTRIM(COALESCE(MA.UNITORSUITE,'') + ' ') 
+					ELSE ''
+			  END
+		  ) AL1
+		, (CASE WHEN RTRIM(LTRIM(COALESCE(MA.CITY,''))) = '' 
+			THEN '' 
+			ELSE RTRIM(LTRIM(COALESCE(MA.CITY,''))) + ', ' END)
+			+ (LTRIM(COALESCE(MA.[STATE],'') + ' ') 
+			+ REPLACE((CASE WHEN LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ','')) &gt; 5 
+			THEN LEFT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),5) + '-' + RIGHT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),ABS(LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''))-5)) 
+			ELSE COALESCE(MA.POSTALCODE,'') END),'--','-')
+		  ) AL2
+		  , ROW_NUMBER () OVER (
+			PARTITION BY C.GLOBALENTITYID
+			ORDER BY GEMA.MAIN DESC, MA.MAILINGADDRESSID
+		  ) ROWNBR
+	FROM CONTACTS C
+	INNER JOIN GLOBALENTITYMAILINGADDRESS GEMA ON C.GLOBALENTITYID = GEMA.GLOBALENTITYID
+	INNER JOIN MAILINGADDRESS MA ON GEMA.MAILINGADDRESSID = MA.MAILINGADDRESSID
+	)
+--Main Query
+SELECT P.PLPLANID, P.PLANNUMBER --TDC-Online Plan Number
+	, P.APPLICATIONDATE
+	, OWN.CONTACTNAME, OWN.COMPANYNAME --Owner Company
+	, OWN_ADD.AL1 OWNERADDRESS_LINE1, OWN_ADD.AL2 OWNADDRESS_LINE2 --Owner Address 
+	, CS.MEMO_ProjectNameTitle --Project Name/Title
+	, CS.TXT_PlanNo --TW Plan Number
+	, CS.AUTOTXT_Twnshp_Sect_Range TRS
+	, (SELECT [IMAGE] FROM RPTIMAGELIB WHERE IMAGENAME = 'TucsonLogo') AS TucsonLogo --Subquery to get the city logo from the report image library
+	, (SELECT [IMAGE] FROM RPTIMAGELIB WHERE IMAGENAME = 'TucsonWaterLogo') AS TucsonWaterLogo --Subquery to get the department logo
+FROM PLPLAN P
+	LEFT JOIN CONTACTS OWN ON P.PLPLANID = OWN.PLPLANID
+		AND OWN.CONTACTTYPE = 'Owner' AND OWN.ROWNBR = 1
+	LEFT JOIN CONADD OWN_ADD ON OWN.GLOBALENTITYID = OWN_ADD.GLOBALENTITYID
+		AND OWN_ADD.ROWNBR = 1
+	LEFT JOIN CUSTOMSAVERPLANMANAGEMENT CS ON P.PLPLANID = CS.ID
+WHERE P.PLPLANID = @PLPLANID
+</CommandText>
+      </Query>
+      <Fields>
+        <Field Name="PLPLANID">
+          <DataField>PLPLANID</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="PLANNUMBER">
+          <DataField>PLANNUMBER</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="APPLICATIONDATE">
+          <DataField>APPLICATIONDATE</DataField>
+          <rd:TypeName>System.DateTime</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTNAME">
+          <DataField>CONTACTNAME</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="COMPANYNAME">
+          <DataField>COMPANYNAME</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="OWNERADDRESS_LINE1">
+          <DataField>OWNERADDRESS_LINE1</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="OWNADDRESS_LINE2">
+          <DataField>OWNADDRESS_LINE2</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="MEMO_ProjectNameTitle">
+          <DataField>MEMO_ProjectNameTitle</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="TXT_PlanNo">
+          <DataField>TXT_PlanNo</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="TRS">
+          <DataField>TRS</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="TucsonLogo">
+          <DataField>TucsonLogo</DataField>
+          <rd:TypeName>System.Byte[]</rd:TypeName>
+        </Field>
+        <Field Name="TucsonWaterLogo">
+          <DataField>TucsonWaterLogo</DataField>
+          <rd:TypeName>System.Byte[]</rd:TypeName>
+        </Field>
+      </Fields>
+    </DataSet>
+  </DataSets>
+  <ReportSections>
+    <ReportSection>
+      <Body>
+        <ReportItems>
+          <Image Name="TusconWaterLogo">
+            <Source>Database</Source>
+            <Value>=First(Fields!TucsonWaterLogo.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+            <MIMEType>image/png</MIMEType>
+            <Sizing>FitProportional</Sizing>
+            <Top>0.01389in</Top>
+            <Left>4.5in</Left>
+            <Height>1.472in</Height>
+            <Width>3.25in</Width>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Image>
+          <Rectangle Name="Rectangle1">
+            <ReportItems>
+              <Textbox Name="Textbox7">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>AGREEMENT FOR CONSTRUCTION OF WATER FACILITIES UNDER PRIVATE CONTRACT </Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontWeight>Bold</FontWeight>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style>
+                      <TextAlign>Center</TextAlign>
+                    </Style>
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox7</rd:DefaultName>
+                <Left>2.283in</Left>
+                <Height>0.833in</Height>
+                <Width>3.433in</Width>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                  <PaddingTop>0.5in</PaddingTop>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox8">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Label>PLANNUMBER</Label>
+                        <Value>=First(Fields!PLANNUMBER.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                        <Style>
+                          <FontFamily>TIMes New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <Color>Red</Color>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox8</rd:DefaultName>
+                <Top>0.833in</Top>
+                <Left>0.25in</Left>
+                <Height>0.158in</Height>
+                <Width>1.742in</Width>
+                <ZIndex>1</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox9">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>THIS AGREEMENT, authorized by Section 27-37 of the Tucson Code, made and entered into this____ day of__________________,  20________, by and between TUCSON WATER, hereinafter called the City, and authorized representative for </Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Label>COMPANYNAME</Label>
+                        <Value>=First(Fields!COMPANYNAME.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>, </Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Label>OWNERADDRESS_LINE1</Label>
+                        <Value>=First(Fields!OWNERADDRESS_LINE1.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>, </Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Label>OWNADDRESS_LINE2</Label>
+                        <Value>=First(Fields!OWNADDRESS_LINE2.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value> herinafter called the Applicant. </Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox9</rd:DefaultName>
+                <Top>1.167in</Top>
+                <Left>0.25in</Left>
+                <Height>0.726in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>2</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Line Name="Line1">
+                <Top>1.52in</Top>
+                <Left>1.875in</Left>
+                <Height>0in</Height>
+                <Width>0.175in</Width>
+                <ZIndex>3</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>Solid</Style>
+                  </Border>
+                </Style>
+              </Line>
+            </ReportItems>
+            <KeepTogether>true</KeepTogether>
+            <Top>1.48589in</Top>
+            <Height>1.893in</Height>
+            <Width>7.98in</Width>
+            <ZIndex>1</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Rectangle>
+          <Rectangle Name="Rectangle3">
+            <ReportItems>
+              <Textbox Name="Textbox3">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>WITNESSTH:</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox3</rd:DefaultName>
+                <Top>0.167in</Top>
+                <Left>0.75in</Left>
+                <Height>0.2in</Height>
+                <Width>1.475in</Width>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox10">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value xml:space="preserve">              </Value>
+                        <Style />
+                      </TextRun>
+                      <TextRun>
+                        <Value>WHEREAS, the Applicant desires to install a water facility to provide service to the following described parcel of land </Value>
+                        <Style>
+                          <FontFamily>TIMES New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Label>MEMO_ProjectNameTitle</Label>
+                        <Value>=First(Fields!MEMO_ProjectNameTitle.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                        <Style>
+                          <FontFamily>TIMES New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value> a portion of </Value>
+                        <Style>
+                          <FontFamily>TIMES New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Label>@Section</Label>
+                        <Value>=IIF(Len(Fields!TRS.Value) = 8
+, "Section " 
+	+ RIGHT(Fields!TRS.Value, 2) 
+	+ ", T" 
+	+ LEFT(Fields!TRS.Value, 3)
+	+  "R" 
+	+ MID(Fields!TRS.Value, 4, 3)
+, Fields!TRS.Value
+)</Value>
+                        <Style>
+                          <FontFamily>TIMES New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>, of G. &amp; S.R.B &amp; M.,</Value>
+                        <Style>
+                          <FontFamily>TIMES New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value> and</Value>
+                        <Style>
+                          <FontFamily>TIMES New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox10</rd:DefaultName>
+                <Top>0.5in</Top>
+                <Left>0.25in</Left>
+                <Height>0.383in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>1</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox11">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value xml:space="preserve">		          </Value>
+                        <Style />
+                      </TextRun>
+                      <TextRun>
+                        <Value>WHEREAS, the following special condition(s) applies to the above-described property only when so indicated by an "X" next to the condition described below:</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox11</rd:DefaultName>
+                <Top>1.083in</Top>
+                <Left>0.25in</Left>
+                <Height>0.392in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>2</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox12">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>______(1) The water facility will be a Protected Main per Plan No. </Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Label>TXT_PlanNo</Label>
+                        <Value>=First(Fields!TXT_PlanNo.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value> and, therefore, will be subject to the conditions outlined in Section VII of this Agreement.
+
+______(2) The water facility will be a protected booster per Plan No. </Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Label>TXT_PlanNo</Label>
+                        <Value>=First(Fields!TXT_PlanNo.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value> and, therefore, will be subjected to the conditions outlined in Section VIII of this agreement.
+
+___X__(3) Prior to the final inspection, Applicant shall pay to the City all applicable Fees as authorized by Section 27 of the Tucson Code.  
+
+______(4) The system herein permitted is located within the _____area specific water system plan and is thereby subject to an additional water development fee as authorized by Section 27-36 of the Tucson Code.  Payment of the development fee is required prior to water service connection to the system.
+
+______(5) The Applicant acknowledges that Tucson Water may not have an adequate water supply in the vicinity of the above-described property to meet fire flow requirements.  The Applicant further acknowledges that this condition may not change in the future and agrees to accept the level of water service that now exists or may exist in the future.  Applicant shall indemnify, defend, and save harmless the City, its Mayor and Council, officers and employees, boards, committees and commissions from and against any loss, claim, suit, demand, cause of action, or liability of any nature, including but not limited to damage to property and injuries to persons, including death, arising or alleged to have arisen, in whole or in part, out of the provision, or failure of the City to provide, water service adequate to meet fire flow requirements to the property.
+
+______(6) Tucson Water agrees to reimburse the Developer for the cost differential for constructing excess facility’s capacity in accordance with the rates as specified in the City of Tucson Ordinance No. 8838 (or as amended thereafter).  Reimbursement payment shall be initiated upon “final acceptance” of the facilities by Tucson Water.</Value>
+                        <Style>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox12</rd:DefaultName>
+                <Top>1.667in</Top>
+                <Left>0.25in</Left>
+                <Height>4.40156in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>3</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Line Name="Line2">
+                <Top>2.91in</Top>
+                <Left>0.45361in</Left>
+                <Height>0in</Height>
+                <Width>0.20506in</Width>
+                <ZIndex>4</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>Solid</Style>
+                  </Border>
+                </Style>
+              </Line>
+            </ReportItems>
+            <KeepTogether>true</KeepTogether>
+            <Top>3.37889in</Top>
+            <Height>6.06856in</Height>
+            <Width>7.98in</Width>
+            <ZIndex>2</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Rectangle>
+          <Rectangle Name="Rectangle4">
+            <ReportItems>
+              <Textbox Name="Textbox13">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>______(7) This project will be required to use automatic meter reading (AMR) equipment. The Applicant will be held responsible for the care and condition of the AMR meter, transmitter and meter box. The additional cost of the AMR equipment will be determined at the time of meter application in accordance with Chapter 27 Section 35 of the City of Tucson code. 
+
+______(8) Other:
+
+</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value xml:space="preserve">		    </Value>
+                        <Style />
+                      </TextRun>
+                      <TextRun>
+                        <Value>WHEREAS, the required plans, specifications, and materials for said facility have been approved by the City on 	</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value xml:space="preserve">		                  </Value>
+                        <Style />
+                      </TextRun>
+                      <TextRun>
+                        <Value>__________, 20_____; and
+
+</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value xml:space="preserve">		    </Value>
+                        <Style />
+                      </TextRun>
+                      <TextRun>
+                        <Value>WHEREAS, the Applicant desires that the City take possession of, operate and service said water facility; and
+
+</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value xml:space="preserve">		    </Value>
+                        <Style />
+                      </TextRun>
+                      <TextRun>
+                        <Value>WHEREAS, the City is willing to accept said facility and permit it to be connected to the City Water System 	</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value xml:space="preserve">		                      </Value>
+                        <Style />
+                      </TextRun>
+                      <TextRun>
+                        <Value>provided it meets City standards and the work is done in accordance with City requirements;
+
+</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value xml:space="preserve">		    </Value>
+                        <Style />
+                      </TextRun>
+                      <TextRun>
+                        <Value>NOW, THEREFORE, in consideration of the matters and conditions herein set forth, IT IS HEREBY AGREED AS 
+FOLLOWS:</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox13</rd:DefaultName>
+                <Top>0.167in</Top>
+                <Left>0.25in</Left>
+                <Height>3.18056in</Height>
+                <Width>7.5in</Width>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox14">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>I.   	</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>GENERAL</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>
+
+	     1.		       The Applicant shall design and install, at applicant's own expense, a water facility in accordance with Plan No. </Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Label>TXT_PlanNo</Label>
+                        <Value>=First(Fields!TXT_PlanNo.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value> and City Standard Waterworks Specifications and Details and special specifications and details as approved by the City and by this reference made a part hereof.  The document referenced herein as Plan No. </Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Label>TXT_PlanNo</Label>
+                        <Value>=First(Fields!TXT_PlanNo.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value> shall include a plan note for new water facility and any and all alterations to the existing water system.
+
+	     2.		       The work permitted by this Agreement shall be done by a contractor properly licensed by the State of Arizona to perform work described herein in accordance with plans approved by the City.
+
+	     3.		       Before any service connections are made to the system herein permitted the Applicant shall pay to the City the connection fees required by Section 27 of the Tucson Code or any other required fees referenced herein.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox14</rd:DefaultName>
+                <Top>3.36144in</Top>
+                <Left>0.25in</Left>
+                <Height>2.333in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>1</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox15">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>	     4.		       No service connections will be made until, (1) the system has been accepted by the City and (2) all fees with the exception of those fees identified in paragraph I.3 herein are paid in accordance with Section 27 of the Tucson Code.
+
+	     5.		       Any property connecting onto a water main must have a minimum of fifteen feet (15') of frontage upon that main.  The provision or existence of a water or other utility easement shall not constitute frontage for purposes of this paragraph.
+	
+	     6.		       Meter application will be accepted only if the property to be served is fronting the waterline.  Only one water meter application will be allowed per legal description unless property owner can provide Tucson Water with justified plans as to what type of improvement/development is taking place on the parcel of land.  If a property owner applies for a meter while the property is fronting the water main and later sells that portion of land which is fronting the water main the water meter will revert to the new owner unless other arrangements are made and are approved by Engineering Support Services prior to conveyance.
+</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox15</rd:DefaultName>
+                <Top>5.69444in</Top>
+                <Left>0.25in</Left>
+                <Height>2.29167in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>2</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox16">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>	     7.		       The Applicant shall furnish all labor, materials, equipment, supplies and tools required to complete the work herein permitted.
+
+	     8.		       Execution of this Agreement certifies that the applicant has reviewed the plans and specifications, approved the location of service lines and is in full accord therewith.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox16</rd:DefaultName>
+                <Top>8in</Top>
+                <Left>0.25in</Left>
+                <Height>1.09756in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>3</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+            </ReportItems>
+            <KeepTogether>true</KeepTogether>
+            <Top>9.64189in</Top>
+            <Height>9.167in</Height>
+            <Width>7.98in</Width>
+            <ZIndex>3</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Rectangle>
+          <Rectangle Name="Rectangle5">
+            <ReportItems>
+              <Textbox Name="Textbox17">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>	     9.		       Projects which are inactive for more than one year will be canceled, along with the Construction Agreement, if applicable.  An unapproved plan will be canceled if more than one year has passed since the last review, and the plan has not been resubmitted.  An approved plan will be canceled if more than one year has passed since plan approval, and construction has not begun.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox17</rd:DefaultName>
+                <Top>0.167in</Top>
+                <Left>0.25in</Left>
+                <Height>0.75in</Height>
+                <Width>7.5in</Width>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox18">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>II. 	</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>ENGINEERING AND INSPECTION</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>
+
+	     1.		       When the cost of construction is greater than $12,500, the Applicant shall employ a registered Civil Engineer to accomplish system design and to lay out and establish control lines and certify the layout according to the approved plans.
+
+	     2.		       Any inspector authorized by the City shall have full inspection authority over the work to be performed hereunder.  The Applicant shall furnish the City Inspector with reasonable facilities for obtaining full information concerning the work.  The work shall be subject to City inspection at all  times.  Defective work shall be corrected in a manner satisfactory to the City Inspector.  Inspection by the City is for the purpose of  ensuring compliance with  plans and specifications only.    The City makes no guarantee as to the safety or engineering soundness of plans prepared by Applicant or any contractor.
+
+	     3.		       In the event that, because of contractor scheduling, a City Inspector is caused to work any overtime, or during any hours other than normal 40 hours in a work period, or on a legal holiday as defined in City of Tucson Administrative Directive 2.01-6, the applicant or the contractor shall compensate the City for any additional salaries, expenses or employee benefits relating to such overtime or holiday work.  Such additional inspection costs will be billed to the Applicant.  A normal work period shall be defined as 40 hours in a seven (7) day work period, usually worked on an eight (8) hour day, five (5) day basis, commencing on Monday and ending on Friday, continuing in seven (7) day increments.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox18</rd:DefaultName>
+                <Top>1.083in</Top>
+                <Left>0.25in</Left>
+                <Height>3.12889in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>1</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+            </ReportItems>
+            <KeepTogether>true</KeepTogether>
+            <Top>18.80889in</Top>
+            <Height>4.21189in</Height>
+            <Width>7.98in</Width>
+            <ZIndex>4</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Rectangle>
+          <Rectangle Name="Rectangle6">
+            <ReportItems>
+              <Textbox Name="Textbox19">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>III. 	</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>PRECONSTRUCTION PROCEDURE</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>
+
+	     1.		       The Applicant shall submit a written request to begin construction to the City five (5) working days prior to the time work is to commence.
+
+	     2.		       This Agreement shall be completed, signed and notarized and returned to Tucson Water prior to issuance of a "Notice to Proceed".
+
+	     3.		       No work shall commence until the City has issued a "Notice to Proceed" which will specify the starting date and a reasonable time for completion.
+
+	     4.		       The work shall be commenced and carried on at such points and in such order as may be directed by the City.
+
+	     5.		       Materials used in the construction shall be available for sampling and testing prior to being used in the work.  Materials that fail to meet City specification shall be removed from the site.
+
+	     6.		       The Applicant shall, at Applicant's expense, obtain all necessary permits and licenses for work permitted herein, pay all fees and comply with all laws, ordinances and regulations relating to the work, public health and safety and safety of Applicant's employees or Applicant's contractors employees.
+
+	     7.		       No work shall commence until the Applicant or Applicant's contractor has obtained a construction water permit from the Business Services Division, Billing Office.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox19</rd:DefaultName>
+                <Top>0.167in</Top>
+                <Left>0.25in</Left>
+                <Height>4in</Height>
+                <Width>7.5in</Width>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+            </ReportItems>
+            <KeepTogether>true</KeepTogether>
+            <Top>23.02078in</Top>
+            <Height>4.167in</Height>
+            <Width>7.98in</Width>
+            <ZIndex>5</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Rectangle>
+          <Rectangle Name="Rectangle7">
+            <ReportItems>
+              <Textbox Name="Textbox20">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>IV. 	</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>CONSTRUCTION</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>
+
+	     1.		       The work shall be commenced on the date specified in the "Notice to Proceed".
+
+	     2.		       The Applicant, or Applicant's designated agent, shall be present at all times during performance of the work.  The name of the designated agent and the contractor performing the work shall be furnished to the City before commencement of the work.  Instructions given the designated agent on the work site shall be deemed to have been given to the Applicant.
+
+	     3.		       The Applicant shall employ only competent and efficient laborers, mechanics or artisans on the work and the Applicant agrees to perform the work diligently to complete the work on or before the completion date given in the "Notice to Proceed".
+
+	     4.		       The Applicant shall identify and locate all water valves prior to paving and set valve boxes to final grade after paving.
+
+	     5.		       The Applicant shall, at Applicant's expense, make any and all alterations to the existing water system, either on-site or off-site, necessitated by paving, drainage, or other improvements caused by this development.
+
+	     6.		       The Applicant shall require the Contractor or subcontractor to comply with all safety requirements of the Occupational Safety and Hazards Act as set forth by the Federal Government and as implemented by the State of Arizona.  The Applicant or Applicant's contractor shall be solely responsible for all fines or other penalties provided for by law for any violations of the Occupational Safety Hazards Act.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox20</rd:DefaultName>
+                <Top>0.167in</Top>
+                <Left>0.25in</Left>
+                <Height>4.11144in</Height>
+                <Width>7.5in</Width>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox21">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>V.  	</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>INDEMNITY</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>
+
+	     1.	       	In addition to any liability imposed by law, which liability is not affected hereby, on behalf of Applicant and any contractor hired by Applicant, to perform any work hereunder, shall indemnify, defend, and save harmless the City of Tucson, its Mayor and Council, officers and employees, boards, committees and commissions from and against any loss, claim, suit, demand, cause of action, or liability of any nature, including but not limited to damage to property and injuries to persons, including death, arising or alleged to have arisen, in whole or in part, out of any act or omission of Applicant or any such contractor or any subcontractor, or any person employed directly or indirectly, by any of them in the performance of any work or operations pursuant to this agreement.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox21</rd:DefaultName>
+                <Top>4.45in</Top>
+                <Left>0.25in</Left>
+                <Height>1.667in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>1</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox22">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>VI. 	</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>DEDICATION</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>
+
+	     1.		       The Applicant shall, and does, hereby grant, bargain, sell, convey, transfer and deliver to the City, said water facility to be installed pursuant to this Agreement free and clear of all liens, claims, charges or encumbrances, upon final acceptance of said work by the City.
+
+	     2.		       The Applicant guarantees the work to be free from all failures due to poor workmanship or materials for a period of two years from the final acceptance date by the City.
+
+	     3.		       The Applicant shall not construct any utility, building or other improvement which would interfere with the operation or maintenance of the waterline or water facility to be installed pursuant to this agreement.
+
+	     4.		       The Applicant further guarantees that all service lines, meters, and meter boxes will be to finish grade and that he will remain responsible for raising/lowering said services as required until the area described in fully developed.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox22</rd:DefaultName>
+                <Top>6.242in</Top>
+                <Left>0.25in</Left>
+                <Height>2.87in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>2</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <PaddingLeft>2pt</PaddingLeft>
+                  <PaddingRight>2pt</PaddingRight>
+                  <PaddingTop>2pt</PaddingTop>
+                  <PaddingBottom>2pt</PaddingBottom>
+                </Style>
+              </Textbox>
+            </ReportItems>
+            <KeepTogether>true</KeepTogether>
+            <Top>27.67389in</Top>
+            <Height>9.203in</Height>
+            <Width>7.98in</Width>
+            <ZIndex>6</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Rectangle>
+          <Rectangle Name="Rectangle9">
+            <ReportItems>
+              <Textbox Name="Textbox23">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>	     5.		       The City shall accept title to and take possession of the said facility upon completion of said work to the satisfaction of the City, and upon acceptance and approval of said work, the City shall operate and service said facility.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox23</rd:DefaultName>
+                <Top>0.167in</Top>
+                <Left>0.25in</Left>
+                <Height>0.417in</Height>
+                <Width>7.5in</Width>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox24">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>VII. 	    </Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>PROTECTED MAIN</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>
+
+	     1.		       Any portion of the system described as a Protected Main in the preamble hereto shall be eligible for protection as authorized by Section 27-38 of the Tucson Code.
+
+	     	     (a)		       Participating property which is re-subdivided or split in such a manner that any portion thereof no longer fronts upon the protected main for a distance of at least fifteen feet (15') will not be considered a participating property and will not be eligible for a water connection to the protected main or any main in the absence of a remote meter agreement.
+
+	     2.		       Upon completion and acceptance of the facility installed pursuant to this Agreement, the Applicant may be eligible for refund of that portion of the cost that is not directly attributable to providing water service solely to Applicant's property as follows:
+
+		          (a)		       When a meter application is received by the City for a water service or water main connection to the water main installed pursuant to this Agreement by non-participating property fronting the main, the City will collect the fees required by Section 27-37 (4) of the Tucson Code to be refunded to the Applicant.
+
+		          (b)		       These sums, or portions thereof, when collected by the City shall be refunded to the Applicant as a pro-rata share of the refundable portion of the cost of the water main based upon the "As-Built" footage of the main installed by the aforesaid Agreement in said street, alley or easement right-of-way.
+
+	          	(c)	       	In no event will the aggregate amount refunded exceed the full, authorized refundable portion of the cost of the water facilities installed.  In the event the full authorized amount has not been refunded within fifteen (15) years from the date of this Agreement, any balances remaining unpaid shall be considered canceled, and the City shall be fully discharged from any further obligations under this Agreement.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style>
+                      <LineHeight>1pt</LineHeight>
+                    </Style>
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox24</rd:DefaultName>
+                <Top>0.75in</Top>
+                <Left>0.25in</Left>
+                <Height>4.54133in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>1</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox25">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>	     3.		       Upon completion of construction, a refund amount due to the Applicant will be determined based on the rates set forth in Section 27-37 of the Tucson Code.
+
+	     4.		       The City of Tucson makes no guarantee that the Applicant will recover the full balance due in case it becomes necessary to construct other water mains to serve the same properties or if the sums collected do not cover the full cost of the water main installed or if the property is served by mains otherwise constructed.
+
+	     5.		       Extensions of the system described in the preamble hereto to provide service to subdivisions, lots or parcels remote from the street, alley or easement right-of-way line containing the aforesaid protected main, will not be subject to protected main fees.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox25</rd:DefaultName>
+                <Top>5.29133in</Top>
+                <Left>0.25in</Left>
+                <Height>1.833in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>2</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+            </ReportItems>
+            <KeepTogether>true</KeepTogether>
+            <Top>36.87689in</Top>
+            <Height>7.416in</Height>
+            <Width>7.98in</Width>
+            <ZIndex>7</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Rectangle>
+          <Rectangle Name="Rectangle10">
+            <ReportItems>
+              <Textbox Name="Textbox26">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>VIII.  	   </Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>PROTECTED BOOSTER</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                          <FontWeight>Bold</FontWeight>
+                          <TextDecoration>Underline</TextDecoration>
+                        </Style>
+                      </TextRun>
+                      <TextRun>
+                        <Value>
+
+	     1.		       Any portion of the system described as a Protected Facility in the preamble hereto shall be eligible for protection as authorized by Section 27-38 of the Tucson Code.
+
+	     2.		       Upon completion and acceptance of the facility installed pursuant to this Agreement, the Applicant may be eligible for refund of that portion of the cost that is not directly attributable to providing water service solely to Applicant's property as follows:
+
+		          (a)		       When a meter application is received by the City for a water service served by the booster installed pursuant to this Agreement by non-participating property, the City will collect the fees required by Section 27-37 (4) of the Tucson Code to be refunded to the Applicant.
+
+		          (b)		       These sums, or portions thereof, when collected by the City shall be refunded to the Applicant as a pro-rata share of the refundable portion of the cost of the booster based upon the final cost of the booster installed by the aforesaid Agreement.
+
+		          (c)		       In no event will the aggregate amount refunded exceed the full, authorized refundable portion of the cost of the water facilities installed.  In the event the full authorized amount has not been refunded within fifteen (15) years from the date of this Agreement, any balances remaining unpaid shall be considered canceled, and the City shall be fully discharged from any further obligations under this Agreement.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox26</rd:DefaultName>
+                <Top>0.167in</Top>
+                <Left>0.25in</Left>
+                <Height>3.833in</Height>
+                <Width>7.5in</Width>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox27">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>	     3.		       Upon completion of construction, a refund amount due to the Applicant will be determined based on the rates set forth in Section 27-37 of the Tucson Code.
+
+	     4.		       The City of Tucson makes no guarantee that the Applicant will recover the full balance due in case it becomes necessary to construct other water mains to serve the same properties or if the sums collected do not cover the full cost of the water main installed or if the property is served by mains otherwise constructed.
+
+	     5.		       Refundable amounts will be based upon a pro-rata share of the final cost of the facility improvements divided by the non-participating area yet to be developed in accordance with 27-37 (4) of the Tucson Code.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox27</rd:DefaultName>
+                <Top>4.167in</Top>
+                <Left>0.25in</Left>
+                <Height>1.625in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>1</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+            </ReportItems>
+            <KeepTogether>true</KeepTogether>
+            <Top>44.29289in</Top>
+            <Height>5.792in</Height>
+            <Width>7.98in</Width>
+            <ZIndex>8</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Rectangle>
+          <Rectangle Name="Rectangle11">
+            <ReportItems>
+              <Textbox Name="Textbox28">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>	     THIS AGREEMENT shall be binding upon and inure to the benefit of the heirs, executors, administrators, successors and assigns of the parties; provided however that Applicant may not assign this agreement without prior  written consent of Tucson Water.
+
+	     IN WITNESS WHEREOF, the Applicant has executed or has caused this instrument to be executed by its proper officers hereunto duly authorized, and the City has caused this instrument to be executed by its proper officers thereunto duly authorized, all as of this day and year first above written.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox28</rd:DefaultName>
+                <Top>0.5in</Top>
+                <Left>0.25in</Left>
+                <Height>1.583in</Height>
+                <Width>7.5in</Width>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox29">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>													                                                                                ___________________________________________________
+								   										                                                                                                      Applicant (Please Print)
+
+					       						                                                                   BY: ___________________________________________________
+							 									                                                                                               Signature                            Title
+
+													                                                                                ___________________________________________________
+							   												                                                                                                             Mailing Address
+ATTEST:
+____________________________________
+
+STATE OF ARIZONA)
+		                       ) SS.
+COUNTY OF PIMA     )</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox29</rd:DefaultName>
+                <Top>2.09689in</Top>
+                <Left>0.25in</Left>
+                <Height>2.5in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>1</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox30">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>On this, the _______ day of _____________________, 20_____, before me the undersigned officer, personally appeared _____________________________, known to me to be the persons who subscribed the foregoing instrument, and acknowledge that they executed the same for and on behalf of said person/corporation for the purposes and considerations therein expressed.
+
+	     IN WITNESS WHEREOF, I have hereunto set my hand and official seal.</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox30</rd:DefaultName>
+                <Top>4.75in</Top>
+                <Left>0.25in</Left>
+                <Height>1.083in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>2</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+              <Textbox Name="Textbox31">
+                <CanGrow>true</CanGrow>
+                <KeepTogether>true</KeepTogether>
+                <Paragraphs>
+                  <Paragraph>
+                    <TextRuns>
+                      <TextRun>
+                        <Value>						         						                                                             _______________________________________________
+								                  								                                                                                Notary Public
+My Commission Expires:
+
+________________________________	         APPROVED FOR: THE CITY OF TUCSON - TUCSON WATER
+
+					            					                                                 BY:     _______________________________________________
+						  							                                                                   For the Director:            Michael Mourreale, P.E.
+	 	                                                                                                                    Engineering Manager
+	                                                                                                              	       Tucson Water Department
+									     								                                                                                        	       	310 W. Alameda
+									      										                                                                                              P.O. Box 27210
+									     										                                                                                               Tucson, AZ   85726-7210</Value>
+                        <Style>
+                          <FontFamily>times New Roman</FontFamily>
+                          <FontSize>11pt</FontSize>
+                        </Style>
+                      </TextRun>
+                    </TextRuns>
+                    <Style />
+                  </Paragraph>
+                </Paragraphs>
+                <rd:DefaultName>Textbox31</rd:DefaultName>
+                <Top>6in</Top>
+                <Left>0.25in</Left>
+                <Height>2.333in</Height>
+                <Width>7.5in</Width>
+                <ZIndex>3</ZIndex>
+                <Style>
+                  <Border>
+                    <Style>None</Style>
+                  </Border>
+                  <VerticalAlign>Top</VerticalAlign>
+                </Style>
+              </Textbox>
+            </ReportItems>
+            <KeepTogether>true</KeepTogether>
+            <Top>50.08489in</Top>
+            <Height>8.333in</Height>
+            <Width>7.98in</Width>
+            <ZIndex>9</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Rectangle>
+        </ReportItems>
+        <Height>58.41789in</Height>
+        <Style />
+      </Body>
+      <Width>7.98in</Width>
+      <Page>
+        <PageHeader>
+          <Height>0.36in</Height>
+          <PrintOnLastPage>true</PrintOnLastPage>
+          <ReportItems>
+            <Textbox Name="Textbox6">
+              <CanGrow>true</CanGrow>
+              <KeepTogether>true</KeepTogether>
+              <Paragraphs>
+                <Paragraph>
+                  <TextRuns>
+                    <TextRun>
+                      <Label>Print Date</Label>
+                      <Value>=DateAdd("h", -7, Globals!ExecutionTime).ToString("MMMM dd, yyyy")</Value>
+                      <Style>
+                        <FontFamily>Arial</FontFamily>
+                        <Color>Gray</Color>
+                      </Style>
+                    </TextRun>
+                  </TextRuns>
+                  <Style>
+                    <TextAlign>Right</TextAlign>
+                  </Style>
+                </Paragraph>
+              </Paragraphs>
+              <rd:DefaultName>Textbox6</rd:DefaultName>
+              <Left>6.167in</Left>
+              <Height>0.36in</Height>
+              <Width>1.583in</Width>
+              <Style>
+                <Border>
+                  <Style>None</Style>
+                </Border>
+                <PaddingTop>0.167in</PaddingTop>
+              </Style>
+            </Textbox>
+          </ReportItems>
+          <Style>
+            <Border>
+              <Style>None</Style>
+            </Border>
+          </Style>
+        </PageHeader>
+        <PageFooter>
+          <Height>0.61611in</Height>
+          <PrintOnFirstPage>true</PrintOnFirstPage>
+          <PrintOnLastPage>true</PrintOnLastPage>
+          <ReportItems>
+            <Textbox Name="Textbox1">
+              <CanGrow>true</CanGrow>
+              <KeepTogether>true</KeepTogether>
+              <Paragraphs>
+                <Paragraph>
+                  <TextRuns>
+                    <TextRun>
+                      <Value>P.O. Box 27210 • Tucson, AZ 85726-7210 520.791.4718 • tucsonaz.gov/water</Value>
+                      <Style>
+                        <FontFamily>arial</FontFamily>
+                        <Color>Gray</Color>
+                      </Style>
+                    </TextRun>
+                  </TextRuns>
+                  <Style>
+                    <TextAlign>Right</TextAlign>
+                  </Style>
+                </Paragraph>
+              </Paragraphs>
+              <rd:DefaultName>Textbox1</rd:DefaultName>
+              <Left>4.833in</Left>
+              <Height>0.38in</Height>
+              <Width>3in</Width>
+              <Visibility>
+                <Hidden>=Globals!PageNumber &lt;&gt; 1</Hidden>
+              </Visibility>
+              <Style>
+                <Border>
+                  <Style>None</Style>
+                </Border>
+                <VerticalAlign>Top</VerticalAlign>
+              </Style>
+            </Textbox>
+            <Rectangle Name="Rectangle2">
+              <ReportItems>
+                <Textbox Name="Textbox2">
+                  <CanGrow>true</CanGrow>
+                  <KeepTogether>true</KeepTogether>
+                  <Paragraphs>
+                    <Paragraph>
+                      <TextRuns>
+                        <TextRun>
+                          <Value>Plan No.:</Value>
+                          <Style>
+                            <FontWeight>Bold</FontWeight>
+                            <Color>Gray</Color>
+                          </Style>
+                        </TextRun>
+                        <TextRun>
+                          <Value xml:space="preserve"> </Value>
+                          <Style>
+                            <Color>Gray</Color>
+                          </Style>
+                        </TextRun>
+                        <TextRun>
+                          <Label>TXT_PlanNo</Label>
+                          <Value>=Fields!TXT_PlanNo.Value</Value>
+                          <Style>
+                            <FontWeight>Bold</FontWeight>
+                            <TextDecoration>Underline</TextDecoration>
+                            <Color>Gray</Color>
+                          </Style>
+                        </TextRun>
+                      </TextRuns>
+                      <Style />
+                    </Paragraph>
+                  </Paragraphs>
+                  <rd:DefaultName>Textbox2</rd:DefaultName>
+                  <Left>0.25in</Left>
+                  <Height>0.278in</Height>
+                  <Width>2.225in</Width>
+                  <Style>
+                    <Border>
+                      <Style>None</Style>
+                    </Border>
+                    <PaddingTop>0.125in</PaddingTop>
+                  </Style>
+                </Textbox>
+                <Textbox Name="Textbox4">
+                  <CanGrow>true</CanGrow>
+                  <KeepTogether>true</KeepTogether>
+                  <Paragraphs>
+                    <Paragraph>
+                      <TextRuns>
+                        <TextRun>
+                          <Label>PLANNUMBER</Label>
+                          <Value>=First(Fields!PLANNUMBER.Value, "CoTAZ_TW_Construction_Agreement")</Value>
+                          <Style>
+                            <FontWeight>Bold</FontWeight>
+                            <Color>Gray</Color>
+                          </Style>
+                        </TextRun>
+                      </TextRuns>
+                      <Style>
+                        <TextAlign>Center</TextAlign>
+                      </Style>
+                    </Paragraph>
+                  </Paragraphs>
+                  <rd:DefaultName>Textbox4</rd:DefaultName>
+                  <Left>3.113in</Left>
+                  <Height>0.278in</Height>
+                  <Width>1.774in</Width>
+                  <ZIndex>1</ZIndex>
+                  <Style>
+                    <Border>
+                      <Style>None</Style>
+                    </Border>
+                    <PaddingTop>0.125in</PaddingTop>
+                  </Style>
+                </Textbox>
+                <Textbox Name="Textbox5">
+                  <CanGrow>true</CanGrow>
+                  <KeepTogether>true</KeepTogether>
+                  <Paragraphs>
+                    <Paragraph>
+                      <TextRuns>
+                        <TextRun>
+                          <Value>Page </Value>
+                          <Style>
+                            <FontFamily>Arial</FontFamily>
+                            <Color>Gray</Color>
+                          </Style>
+                        </TextRun>
+                        <TextRun>
+                          <Label>N</Label>
+                          <Value>=Globals!PageNumber</Value>
+                          <Style>
+                            <FontFamily>Arial</FontFamily>
+                            <Color>Gray</Color>
+                          </Style>
+                        </TextRun>
+                        <TextRun>
+                          <Value> of </Value>
+                          <Style>
+                            <FontFamily>Arial</FontFamily>
+                            <Color>Gray</Color>
+                          </Style>
+                        </TextRun>
+                        <TextRun>
+                          <Label>M</Label>
+                          <Value>=Globals!OverallTotalPages</Value>
+                          <Style>
+                            <FontFamily>Arial</FontFamily>
+                            <Color>Gray</Color>
+                          </Style>
+                        </TextRun>
+                        <TextRun>
+                          <Value xml:space="preserve">  </Value>
+                          <Style>
+                            <FontFamily>Arial</FontFamily>
+                            <Color>Gray</Color>
+                          </Style>
+                        </TextRun>
+                      </TextRuns>
+                      <Style>
+                        <TextAlign>Right</TextAlign>
+                      </Style>
+                    </Paragraph>
+                  </Paragraphs>
+                  <rd:DefaultName>Textbox5</rd:DefaultName>
+                  <Left>5.976in</Left>
+                  <Height>0.278in</Height>
+                  <Width>1.774in</Width>
+                  <ZIndex>2</ZIndex>
+                  <Style>
+                    <Border>
+                      <Style>None</Style>
+                    </Border>
+                    <PaddingTop>0.125in</PaddingTop>
+                  </Style>
+                </Textbox>
+              </ReportItems>
+              <KeepTogether>true</KeepTogether>
+              <Height>0.278in</Height>
+              <Width>7.98in</Width>
+              <ZIndex>1</ZIndex>
+              <Visibility>
+                <Hidden>=Globals!PageNumber = 1</Hidden>
+              </Visibility>
+              <Style>
+                <Border>
+                  <Style>None</Style>
+                </Border>
+              </Style>
+            </Rectangle>
+          </ReportItems>
+          <Style>
+            <Border>
+              <Style>None</Style>
+            </Border>
+          </Style>
+        </PageFooter>
+        <LeftMargin>0.25in</LeftMargin>
+        <RightMargin>0.25in</RightMargin>
+        <TopMargin>0.25in</TopMargin>
+        <BottomMargin>0.25in</BottomMargin>
+        <Style />
+      </Page>
+    </ReportSection>
+  </ReportSections>
+  <ReportParameters>
+    <ReportParameter Name="PLPLANID">
+      <DataType>String</DataType>
+      <DefaultValue>
+        <Values>
+          <Value>00132de2-e999-4470-9d69-62c7fd0408df</Value>
+        </Values>
+      </DefaultValue>
+      <Prompt>PLPLANID</Prompt>
+    </ReportParameter>
+  </ReportParameters>
+  <ReportParametersLayout>
+    <GridLayoutDefinition>
+      <NumberOfColumns>4</NumberOfColumns>
+      <NumberOfRows>2</NumberOfRows>
+      <CellDefinitions>
+        <CellDefinition>
+          <ColumnIndex>0</ColumnIndex>
+          <RowIndex>0</RowIndex>
+          <ParameterName>PLPLANID</ParameterName>
+        </CellDefinition>
+      </CellDefinitions>
+    </GridLayoutDefinition>
+  </ReportParametersLayout>
+  <rd:ReportUnitType>Inch</rd:ReportUnitType>
+  <rd:ReportID>bc706a69-4f1f-4f6a-b711-6f74933913f6</rd:ReportID>
+</Report>

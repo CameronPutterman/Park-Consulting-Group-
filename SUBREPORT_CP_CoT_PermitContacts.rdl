@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Report MustUnderstand="df" xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner" xmlns:df="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition/defaultfontfamily" xmlns:am="http://schemas.microsoft.com/sqlserver/reporting/authoringmetadata">
+  <am:AuthoringMetadata>
+    <am:CreatedBy>
+      <am:Name>SSDTRS</am:Name>
+      <am:Version>17.14.36301.6</am:Version>
+    </am:CreatedBy>
+    <am:UpdatedBy>
+      <am:Name>SSDTRS</am:Name>
+      <am:Version>17.14.36301.6</am:Version>
+    </am:UpdatedBy>
+    <am:LastModifiedTimestamp>2025-07-28T20:55:06.8040359Z</am:LastModifiedTimestamp>
+  </am:AuthoringMetadata>
+  <df:DefaultFontFamily>Segoe UI</df:DefaultFontFamily>
+  <AutoRefresh>0</AutoRefresh>
+  <DataSources>
+    <DataSource Name="CoTuscon">
+      <DataSourceReference>EnerGov_Tucson_Prod</DataSourceReference>
+      <rd:SecurityType>None</rd:SecurityType>
+      <rd:DataSourceID>5e235318-725b-4412-a542-82058e9247ff</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+  <DataSets>
+    <DataSet Name="CoT_PM_PermitContacts">
+      <Query>
+        <DataSourceName>CoTuscon</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@PMPERMITID">
+            <Value>=Parameters!PMPERMITID.Value</Value>
+          </QueryParameter>
+        </QueryParameters>
+        <CommandText>;WITH CONTACT_CTE AS (
+	SELECT GEMA.GLOBALENTITYID
+		, MA.ADDRESSTYPE
+		, RTRIM(LTRIM(COALESCE(MA.POBOX,'') + ' ')
+			+ LTRIM(COALESCE(MA.ADDRESSLINE1,'') + ' ')
+			+ LTRIM(COALESCE(MA.PREDIRECTION,'') + ' ') 
+			+ LTRIM(COALESCE(MA.ADDRESSLINE2,'') + ' ') 
+			+ LTRIM(COALESCE(MA.STREETTYPE,'') + ' ') 
+			+ LTRIM(COALESCE(MA.POSTDIRECTION,'') + ' ') 
+			+ LTRIM(COALESCE(MA.UNITORSUITE,'') + ' ') 
+		  ) ADDRESS_LINE1
+		, (CASE WHEN RTRIM(LTRIM(COALESCE(MA.CITY,''))) = '' 
+			THEN '' 
+			ELSE RTRIM(LTRIM(COALESCE(MA.CITY,''))) + ', ' END)
+			+ (LTRIM(COALESCE(MA.[STATE],'') + ' ') 
+			+ REPLACE((CASE WHEN LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ','')) &gt; 5 
+			THEN LEFT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),5) + '-' + RIGHT(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''),ABS(LEN(REPLACE(COALESCE(MA.POSTALCODE,''),' ',''))-5)) 
+			ELSE COALESCE(MA.POSTALCODE,'') END),'--','-')
+		  ) ADDRESS_LINE2
+	FROM GLOBALENTITYMAILINGADDRESS GEMA
+	INNER JOIN MAILINGADDRESS MA ON GEMA.MAILINGADDRESSID = MA.MAILINGADDRESSID
+)
+SELECT PC.PMPERMITID
+	, GE.GLOBALENTITYID
+	, MA.ADDRESS_LINE1, MA.ADDRESS_LINE2
+	, GE.FIRSTNAME + ' ' + GE.LASTNAME CONTACTNAME
+	, GE.GLOBALENTITYNAME CONTACTCOMPANY
+	, COALESCE(NULLIF(GE.BUSINESSPHONE, ''), NULLIF(GE.MOBILEPHONE, ''), NULLIF(GE.HOMEPHONE, ''), NULLIF(GE.OTHERPHONE, ''), '') CONTACTPHONE
+	, LMCT.[NAME] CONTACTTYPE
+	, ROW_NUMBER() OVER (
+		ORDER BY
+			CASE WHEN LMCT.[NAME] LIKE 'Applicant' THEN 1
+				WHEN LMCT.[NAME] LIKE 'Owner' THEN 2
+				WHEN LMCT.[NAME] LIKE 'Contractor' THEN 3
+				WHEN LMCT.[NAME] LIKE 'Barricade Company' THEN 4
+				WHEN LMCT.[NAME] LIKE 'Sub-Contractor' THEN 5
+			ELSE 10
+		END
+	) AS ROWNBR
+FROM PMPERMITCONTACT PC
+INNER JOIN GLOBALENTITY GE ON GE.GLOBALENTITYID = PC.GLOBALENTITYID
+INNER JOIN LANDMANAGEMENTCONTACTTYPE LMCT ON LMCT.LANDMANAGEMENTCONTACTTYPEID = PC.LANDMANAGEMENTCONTACTTYPEID
+LEFT JOIN CONTACT_CTE MA ON MA.GLOBALENTITYID = GE.GLOBALENTITYID
+WHERE PC.PMPERMITID = @PMPERMITID 
+AND 
+LMCT.[NAME] IN ( 'Applicant', 'Owner', 'Barricade Company', 'Contractor', 'Sub-Contractor' )</CommandText>
+      </Query>
+      <Fields>
+        <Field Name="PMPERMITID">
+          <DataField>PMPERMITID</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="GLOBALENTITYID">
+          <DataField>GLOBALENTITYID</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ADDRESS_LINE1">
+          <DataField>ADDRESS_LINE1</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ADDRESS_LINE2">
+          <DataField>ADDRESS_LINE2</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTNAME">
+          <DataField>CONTACTNAME</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTCOMPANY">
+          <DataField>CONTACTCOMPANY</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTPHONE">
+          <DataField>CONTACTPHONE</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="CONTACTTYPE">
+          <DataField>CONTACTTYPE</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ROWNBR">
+          <DataField>ROWNBR</DataField>
+          <rd:TypeName>System.Int64</rd:TypeName>
+        </Field>
+      </Fields>
+    </DataSet>
+  </DataSets>
+  <ReportSections>
+    <ReportSection>
+      <Body>
+        <ReportItems>
+          <Tablix Name="Tablix2">
+            <TablixBody>
+              <TablixColumns>
+                <TablixColumn>
+                  <Width>1.667in</Width>
+                </TablixColumn>
+                <TablixColumn>
+                  <Width>5.313in</Width>
+                </TablixColumn>
+              </TablixColumns>
+              <TablixRows>
+                <TablixRow>
+                  <Height>0.333in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="CONTACTTYPE">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Label>@CONTACTTYPE</Label>
+                                  <Value>=UCASE(Fields!CONTACTTYPE.Value)</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                  </Style>
+                                </TextRun>
+                                <TextRun>
+                                  <Value>:</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>CONTACTTYPE</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                          </Style>
+                        </Textbox>
+                      </CellContents>
+                    </TablixCell>
+                    <TablixCell>
+                      <CellContents>
+                        <Textbox Name="Textbox12">
+                          <CanGrow>true</CanGrow>
+                          <KeepTogether>true</KeepTogether>
+                          <Paragraphs>
+                            <Paragraph>
+                              <TextRuns>
+                                <TextRun>
+                                  <Label>@ContactInfo</Label>
+                                  <Value>=IIF(Fields!CONTACTTYPE.Value &lt;&gt; "Barricade Company",
+    IIF(Not(IsNothing(Fields!CONTACTCOMPANY.Value) OrElse Trim(Fields!CONTACTCOMPANY.Value) = ""),
+        Fields!CONTACTCOMPANY.Value + vbCrLf + vbCrLf,
+        "") +
+    IIF(Not(IsNothing(Fields!CONTACTNAME.Value) OrElse Trim(Fields!CONTACTNAME.Value) = ""),
+        Fields!CONTACTNAME.Value,
+        "") +
+    IIF(Not(IsNothing(Fields!ADDRESS_LINE1.Value) OrElse Trim(Fields!ADDRESS_LINE1.Value) = ""),
+        vbCrLf + Fields!ADDRESS_LINE1.Value,
+        "") +
+    IIF(Not(IsNothing(Fields!ADDRESS_LINE2.Value) OrElse Trim(Fields!ADDRESS_LINE2.Value) = ""),
+        vbCrLf + Fields!ADDRESS_LINE2.Value,
+        ""),
+    IIF(Not(IsNothing(Fields!CONTACTNAME.Value) OrElse Trim(Fields!CONTACTNAME.Value) = ""),
+        Fields!CONTACTNAME.Value,
+        "") +
+    IIF(Not(IsNothing(Fields!CONTACTPHONE.Value) OrElse Trim(Fields!CONTACTPHONE.Value) = ""),
+        vbCrLf + Fields!CONTACTPHONE.Value,
+        "")
+)</Value>
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                  </Style>
+                                </TextRun>
+                              </TextRuns>
+                              <Style />
+                            </Paragraph>
+                          </Paragraphs>
+                          <rd:DefaultName>Textbox12</rd:DefaultName>
+                          <Style>
+                            <Border>
+                              <Color>LightGrey</Color>
+                              <Style>None</Style>
+                            </Border>
+                            <PaddingBottom>0.083in</PaddingBottom>
+                          </Style>
+                        </Textbox>
+                        <rd:Selected>true</rd:Selected>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+              </TablixRows>
+            </TablixBody>
+            <TablixColumnHierarchy>
+              <TablixMembers>
+                <TablixMember />
+                <TablixMember />
+              </TablixMembers>
+            </TablixColumnHierarchy>
+            <TablixRowHierarchy>
+              <TablixMembers>
+                <TablixMember>
+                  <Group Name="PMPERMITID">
+                    <GroupExpressions>
+                      <GroupExpression>=Fields!PMPERMITID.Value</GroupExpression>
+                    </GroupExpressions>
+                  </Group>
+                  <SortExpressions>
+                    <SortExpression>
+                      <Value>=Fields!PMPERMITID.Value</Value>
+                    </SortExpression>
+                  </SortExpressions>
+                  <TablixMembers>
+                    <TablixMember>
+                      <Group Name="Details" />
+                    </TablixMember>
+                  </TablixMembers>
+                </TablixMember>
+              </TablixMembers>
+            </TablixRowHierarchy>
+            <DataSetName>CoT_PM_PermitContacts</DataSetName>
+            <Height>0.333in</Height>
+            <Width>6.98in</Width>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Tablix>
+        </ReportItems>
+        <Height>0.333in</Height>
+        <Style />
+      </Body>
+      <Width>6.998in</Width>
+      <Page>
+        <LeftMargin>1in</LeftMargin>
+        <RightMargin>1in</RightMargin>
+        <TopMargin>1in</TopMargin>
+        <BottomMargin>1in</BottomMargin>
+        <Style />
+      </Page>
+    </ReportSection>
+  </ReportSections>
+  <ReportParameters>
+    <ReportParameter Name="PMPERMITID">
+      <DataType>String</DataType>
+      <Prompt>@PMPERMITID</Prompt>
+    </ReportParameter>
+  </ReportParameters>
+  <ReportParametersLayout>
+    <GridLayoutDefinition>
+      <NumberOfColumns>4</NumberOfColumns>
+      <NumberOfRows>2</NumberOfRows>
+      <CellDefinitions>
+        <CellDefinition>
+          <ColumnIndex>0</ColumnIndex>
+          <RowIndex>0</RowIndex>
+          <ParameterName>PMPERMITID</ParameterName>
+        </CellDefinition>
+      </CellDefinitions>
+    </GridLayoutDefinition>
+  </ReportParametersLayout>
+  <rd:ReportUnitType>Inch</rd:ReportUnitType>
+  <rd:ReportID>ca1d5101-2fc0-4f52-a09a-ff0570a0e5db</rd:ReportID>
+</Report>

@@ -9,7 +9,7 @@
       <am:Name>SSDTRS</am:Name>
       <am:Version>17.14.36301.6</am:Version>
     </am:UpdatedBy>
-    <am:LastModifiedTimestamp>2025-07-24T17:42:07.0603618Z</am:LastModifiedTimestamp>
+    <am:LastModifiedTimestamp>2025-07-24T19:05:58.4228421Z</am:LastModifiedTimestamp>
   </am:AuthoringMetadata>
   <df:DefaultFontFamily>Segoe UI</df:DefaultFontFamily>
   <AutoRefresh>0</AutoRefresh>
@@ -127,7 +127,7 @@
                 <Value>=Fields!TucsonLogo.Value</Value>
                 <MIMEType>image/png</MIMEType>
                 <Sizing>Fit</Sizing>
-                <Height>1.33556in</Height>
+                <Height>1.25in</Height>
                 <Width>0.844in</Width>
                 <Style>
                   <Border>
@@ -286,7 +286,7 @@
                                 </TextRun>
                                 <TextRun>
                                   <Label>Print Date</Label>
-                                  <Value>=Format(Globals!ExecutionTime, "MM/dd/yyyy")</Value>
+                                  <Value>=Format(Globals!ExecutionTime, "MMMM d, yyyy")</Value>
                                   <Style>
                                     <FontFamily>Arial</FontFamily>
                                     <FontWeight>Normal</FontWeight>
@@ -329,14 +329,16 @@
                                 </TextRun>
                                 <TextRun>
                                   <Label>AL1</Label>
-                                  <Value>=Fields!AL1.Value</Value>
+                                  <Value>=IIF(IsNothing(Fields!AL1.Value) 
+OR Fields!AL1.Value = "", ""
+, Fields!AL1.Value + ",")</Value>
                                   <Style>
                                     <FontFamily>Arial</FontFamily>
                                     <FontWeight>Normal</FontWeight>
                                   </Style>
                                 </TextRun>
                                 <TextRun>
-                                  <Value>, </Value>
+                                  <Value xml:space="preserve"> </Value>
                                   <Style>
                                     <FontFamily>Arial</FontFamily>
                                     <FontWeight>Normal</FontWeight>
@@ -554,7 +556,7 @@
                                 </TextRun>
                                 <TextRun>
                                   <Label>DisplayDate</Label>
-                                  <Value>=Fields!DisplayDate.Value</Value>
+                                  <Value>=Format(Fields!DisplayDate.Value, "dddd, MMMM d, yyyy")</Value>
                                   <Style>
                                     <FontFamily>Arial</FontFamily>
                                     <FontWeight>Normal</FontWeight>
@@ -569,7 +571,7 @@
                                 </TextRun>
                                 <TextRun>
                                   <Label>ExpirationDate</Label>
-                                  <Value>=Fields!ExpirationDate.Value</Value>
+                                  <Value>=Format(Fields!ExpirationDate.Value, "dddd, MMMM d, yyyy")</Value>
                                   <Style>
                                     <FontFamily>Arial</FontFamily>
                                     <FontWeight>Normal</FontWeight>
@@ -749,6 +751,7 @@
                   <TextRun>
                     <Value>PLANNING &amp; DEVELOPMENT SERVICES</Value>
                     <Style>
+                      <FontFamily>arial</FontFamily>
                       <FontSize>8pt</FontSize>
                     </Style>
                   </TextRun>
@@ -792,12 +795,16 @@
                               <TextRuns>
                                 <TextRun>
                                   <Value>Applicant Name: </Value>
-                                  <Style />
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                  </Style>
                                 </TextRun>
                                 <TextRun>
                                   <Label>CONTACTNAME</Label>
                                   <Value>=Fields!CONTACTNAME.Value</Value>
-                                  <Style />
+                                  <Style>
+                                    <FontFamily>Arial</FontFamily>
+                                  </Style>
                                 </TextRun>
                               </TextRuns>
                               <Style />
@@ -835,13 +842,15 @@
                                 </TextRun>
                                 <TextRun>
                                   <Label>AppAL1</Label>
-                                  <Value>=Fields!AppAL1.Value</Value>
+                                  <Value>=IIF(IsNothing(Fields!AppAL1.Value) 
+OR Fields!AppAL1.Value = "", ""
+, Fields!AppAL1.Value + ",")</Value>
                                   <Style>
                                     <FontFamily>Arial</FontFamily>
                                   </Style>
                                 </TextRun>
                                 <TextRun>
-                                  <Value>, </Value>
+                                  <Value xml:space="preserve"> </Value>
                                   <Style>
                                     <FontFamily>Arial</FontFamily>
                                   </Style>
